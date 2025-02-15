@@ -75,6 +75,39 @@ class StockAPI:
             raise StockAPIError(f"Technical analysis failed: {str(e)}") from e
 
 class AIClient:
+    def __init__(self, model="deepseek-r1:1.5b"):
+        self.model = model
+
+    def analyze(self, prompt, role):
+        """
+        Analyzes the given prompt using the specified AI model.
+
+        Args:
+            prompt (str): The input prompt for the AI.
+            role (str): The role or persona for the AI to adopt.
+
+        Returns:
+            dict: The AI's response in JSON format.
+        """
+        try:
+            response = ollama.chat(
+                model=self.model,
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': f"You are a {role}. Provide detailed financial analysis, predictions, and risk management strategies."
+                    },
+                    {
+                        'role': 'user',
+                        'content': prompt
+                    }
+                ]
+            )
+            return response
+        except Exception as e:
+            print(f"Error during AI analysis: {e}")
+            return {'message': {'content': f"Analysis failed: {str(e)}"}}
+
     @staticmethod
     def generate_analysis(
         prompt: str,

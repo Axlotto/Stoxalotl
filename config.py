@@ -1,43 +1,86 @@
 # config.py
-# Application Colors
-COLORS = {
-    "background": "#1e1e1e",    # Dark grey
-    "surface": "#474747",       # Soft grey
-    "primary": "#6366F1",       # Indigo
-    "secondary": "#1e1e1e",     # Dark grey
-    "accent": "#818CF8",        # Light indigo
-    "text": "#F8FAFC",          # Off-white
-    "text-secondary": "#94A3B8",# Gray-blue
-    "positive": "#34D399",      # Mint green
-    "negative": "#F87171",      # Coral red
-    "border": "#1e1e1e"         # Dark grey
+# Application Colors - More refined and customizable
+COLOR_PALETTES = {
+    "Dark": {
+        "background": "#121212",       # Deeper dark grey
+        "surface": "#212121",          # Elevated surface
+        "primary": "#BB86FC",           # Purple
+        "secondary": "#3700B3",         # Darker purple
+        "accent": "#03DAC6",            # Teal accent
+        "text": "#FFFFFF",              # Pure white
+        "text-secondary": "#BDBDBD",     # Light grey
+        "positive": "#4CAF50",          # Green
+        "negative": "#F44336",          # Red
+        "border": "#303030"           # Dark border
+    },
+    "Light": {
+        "background": "#FAFAFA",       # Off-white
+        "surface": "#FFFFFF",          # White
+        "primary": "#6200EE",           # Deep purple
+        "secondary": "#B388FF",         # Light purple
+        "accent": "#03DAC6",            # Teal accent
+        "text": "#212121",              # Dark grey
+        "text-secondary": "#757575",     # Medium grey
+        "positive": "#388E3C",          # Dark green
+        "negative": "#D32F2F",          # Dark red
+        "border": "#E0E0E0"           # Light border
+    },
+    "Custom": {  # Placeholder for user-defined colors
+        "background": "#1E1E1E",
+        "surface": "#474747",
+        "primary": "#6366F1",
+        "secondary": "#1E1E1E",
+        "accent": "#818CF8",
+        "text": "#F8FAFC",
+        "text-secondary": "#94A3B8",
+        "positive": "#34D399",
+        "negative": "#F87171",
+        "border": "#1E1E1E"
+    }
 }
 
-# Yellow for neutral/mid-range values
-YELLOW = "#FFEB3B"
+# Typography Settings - Expanded font choices
+FONT_CHOICES = {
+    "Segoe UI": "Segoe UI, sans-serif",
+    "Roboto": "Roboto, sans-serif",
+    "Open Sans": "Open Sans, sans-serif",
+    "Lato": "Lato, sans-serif",
+    "Montserrat": "Montserrat, sans-serif"
+}
 
-# Typography Settings
-FONT_FAMILY = "Segoe UI"
+FONT_FAMILY = "Segoe UI, sans-serif"  # Default font
+
 FONT_SIZES = {
-    "title": 20,
-    "header": 16,
-    "body": 13,
-    "small": 11
+    "title": 24,       # Larger title
+    "header": 18,
+    "body": 14,
+    "small": 12
 }
 
 # AI Configuration
 OLLAMA_MODEL = "deepseek-r1:1.5b"
 
 # News API Configuration
-NEWS_API_KEY = "your_api_key_here"  # Replace with your actual key
+NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"  # Replace with your actual key
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
-# Chart Configuration
+# Chart Configuration - More options
 CHART_CONFIG = {
-    "default_period": "3mo",     # Default historical data period
-    "interval": "1d",            # Default chart interval
-    "volume_height": 100,        # Height of volume subplot in pixels
-    "candle_width": 0.8          # Width of candlesticks (0-1)
+    "default_period": "3mo",       # Default historical data period
+    "interval": "1d",              # Default chart interval
+    "volume_height": 120,          # Height of volume subplot in pixels
+    "candle_width": 0.7,           # Width of candlesticks (0-1)
+    "grid_color": "#555555",        # Grid line color
+    "axis_color": "#EEEEEE",        # Axis line and tick color
+    "label_color": "#EEEEEE"       # Axis label color
+}
+
+# UI Element Customization
+UI_CONFIG = {
+    "border_radius": 8,            # Rounded corners for widgets
+    "padding": 12,                 # Spacing within widgets
+    "animation_speed": 250,        # Animation speed in ms
+    "button_style": "modern"       # Button style (e.g., "modern", "classic")
 }
 
 # Technical Analysis Settings
@@ -49,6 +92,6 @@ TA_CONFIG = {
 
 # Application Defaults
 DEFAULTS = {
-    "investment_amount": 10000,  # Default investment amount
-    "timeframe": 30              # Default investment days
+    "investment_amount": 10000,    # Default investment amount
+    "timeframe": 30                # Default investment days
 }

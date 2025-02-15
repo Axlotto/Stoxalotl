@@ -1,6 +1,6 @@
 # helpers.py
 import re
-from config import COLORS
+from config import COLOR_PALETTES, FONT_FAMILY, FONT_SIZES
 
 def parse_recommendations(text):
     """
@@ -40,30 +40,33 @@ def parse_recommendations(text):
     
     return recs
 
-def analysis_color(text):
+def analysis_color(text, theme="Dark"):
     """
-    Determine color based on analysis verdict.
+    Determine color based on analysis verdict, using the specified theme.
     
     Args:
         text (str): Analysis text
+        theme (str): Theme name from COLOR_PALETTES (default: "Dark")
         
     Returns:
-        str: Color code from config.COLORS
+        str: Color code from config.COLOR_PALETTES
     """
+    colors = COLOR_PALETTES.get(theme, COLOR_PALETTES["Dark"])  # Get theme colors, default to "Dark"
+    
     if not text:
-        return COLORS['text']
+        return colors['text']
     
     text_lower = text.lower()
     
     if 'verdict: buy' in text_lower:
-        return COLORS['positive']
+        return colors['positive']
     elif 'verdict: sell' in text_lower:
-        return COLORS['negative']
+        return colors['negative']
     elif 'buy' in text_lower:
         return "#90EE90"  # Light green
     elif 'sell' in text_lower:
         return "#FF6961"  # Light red
-    return COLORS['text']
+    return colors['text']
 
 def remove_think_tags(text):
     """
@@ -92,18 +95,21 @@ def format_price(value):
     except (ValueError, TypeError):
         return "N/A"
 
-def get_change_color(current, previous):
+def get_change_color(current, previous, theme="Dark"):
     """
-    Determine color for price change indicators.
+    Determine color for price change indicators, using the specified theme.
     
     Args:
         current (float): Current price
         previous (float): Previous price
+        theme (str): Theme name from COLOR_PALETTES (default: "Dark")
         
     Returns:
-        str: Color code from config.COLORS
+        str: Color code from config.COLOR_PALETTES
     """
+    colors = COLOR_PALETTES.get(theme, COLOR_PALETTES["Dark"])  # Get theme colors, default to "Dark"
+    
     try:
-        return COLORS['positive'] if float(current) >= float(previous) else COLORS['negative']
+        return colors['positive'] if float(current) >= float(previous) else colors['negative']
     except (ValueError, TypeError):
-        return COLORS['text']
+        return colors['text']
