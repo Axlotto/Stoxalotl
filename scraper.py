@@ -19,15 +19,15 @@ NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 # Modern design constants
 COLORS = {
-    "background": "#0a0a0a",
-    "surface": "#1a1a1a",
-    "primary": "#00bcd4",
-    "secondary": "#2d2d2d",
-    "text": "#ffffff",
-    "text-secondary": "#858585",
-    "positive": "#4caf50",  # Green
-    "negative": "#f44336",  # Red
-    "border": "#333333"
+    "background": "#121212",
+    "surface": "#1E1E1E",
+    "primary": "#00C805",  # Green for bullish
+    "secondary": "#2A2A2A",
+    "text": "#FFFFFF",
+    "text-secondary": "#7C7C7C",
+    "negative": "#FF3B30",  # Red for bearish
+    "highlight": "#007AFF",  # Blue for interactive elements
+    "border": "#2D2D2D"
 }
 # Yellow colour used for mid-range percentages
 YELLOW = "#FFEB3B"
@@ -39,6 +39,67 @@ FONT_SIZES = {
     "body": 12,
     "small": 10
 }
+
+# New Mobile Navigation Bar
+class BottomNav(QWidget):
+    navChanged = Signal(int)
+    
+    def __init__(self):
+        super().__init__()
+        self.setFixedHeight(56)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        self.buttons = []
+        for icon, text in [("🏠", "Home"), ("📰", "News"), ("⚙️", "Settings")]:
+            btn = QPushButton(icon + "\n" + text)
+            btn.setCheckable(True)
+            btn.setStyleSheet("""
+                QPushButton {
+                    color: %s;
+                    border: none;
+                    padding: 8px;
+                    font-size: 10pt;
+                }
+                QPushButton:checked {
+                    color: %s;
+                }
+            """ % (COLORS['text-secondary'], COLORS['highlight']))
+            btn.clicked.connect(lambda _, i=len(self.buttons): self.navChanged.emit(i))
+            layout.addWidget(btn)
+            self.buttons.append(btn)
+            
+        self.buttons[0].setChecked(True)
+        self.setLayout(layout)
+
+# News Card Component
+class NewsCard(QFrame):
+    def __init__(self, title, summary, source):
+        super().__init__()
+        self.setStyleSheet(f"""
+            background-color: {COLORS['surface']};
+            border-radius: 12px;
+            padding: 12px;
+        """)
+        layout = QVBoxLayout()
+        
+        title_label = QLabel(title)
+        title_label.setStyleSheet(f"color: {COLORS['text']}; font-weight: 600;")
+        title_label.setWordWrap(True)
+        
+        summary_label = QLabel(summary)
+        summary_label.setStyleSheet(f"color: {COLORS['text-secondary']};")
+        summary_label.setWordWrap(True)
+        
+        source_label = QLabel(source)
+        source_label.setStyleSheet(f"color: {COLORS['highlight']}; font-size: 10pt;")
+        
+        layout.addWidget(title_label)
+        layout.addWidget(summary_label)
+        layout.addWidget(source_label)
+        self.setLayout(layout)
+
 
 class StockOverview(QFrame):
     def __init__(self):
@@ -296,10 +357,9 @@ class ModernStockApp(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Stock Analysis Pro")
-        self.setGeometry(100, 100, 1280, 800)
-        self.setMinimumSize(1024, 768)
-        self.current_ticker = None
+        self.setWindowTitle("TradeMobile")
+        self.setGeometry(100, 100, 360, 640)  # Phone-like dimensions
+        self._setup_ui()
         
         self.update_timer = QTimer(self)
         self.update_timer.setInterval(1000)
@@ -318,15 +378,20 @@ class ModernStockApp(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(8)
         
-        # Header (modified to include home button)
-        header = QWidget()
-        header.setFixedHeight(60)
-        header.setObjectName("header")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(24, 0, 24, 0)
+        # Header
+        header = QHBoxLayout(header)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search ticker...")
+        self.search.setStyleSheet(f"""
+            background: {COLORS['surface']};
+            border-radius: 18px;
+            padding: 8px 16px;
+            font-size: 14pt;
+        """)
+        header.addWidget(self.search)
         
         self.btn_home = QPushButton("🏠")
         self.btn_home.setFixedSize(40, 36)
@@ -340,6 +405,9 @@ class ModernStockApp(QMainWindow):
         self.search.setFixedWidth(300)
         self.search.setClearButtonEnabled(True)
         
+        # Stacked Views
+        self.stack = QStackedWidget()
+
         self.btn_analyze = QPushButton("Analyze")
         self.btn_analyze.setFixedSize(100, 36)
         

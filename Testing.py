@@ -4,15 +4,35 @@ import yfinance as yf
 import ollama
 import requests
 from datetime import datetime, timedelta
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                               QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox,
-                               QGridLayout, QStyle, QTabWidget, QFrame, QScrollArea,
-                               QDialog, QDialogButtonBox, QStackedWidget, QSizePolicy)
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QObject
-from PySide6.QtGui import QFont, QColor, QPixmap
+from PySide6.QtGui import QFont, QColor, QPixmap, QIcon  # Added QIcon here
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTextEdit,
+    QMessageBox,
+    QGridLayout,
+    QStyle,
+    QTabWidget,
+    QFrame,
+    QScrollArea,
+    QDialog,
+    QDialogButtonBox,
+    QStackedWidget,
+    QSizePolicy
+)
 import pyqtgraph as pg
 import time
 from tradingview_ta import TA_Handler, Interval
+import numpy as np
+from pyqtgraph import GraphicsLayoutWidget, BarGraphItem, DateAxisItem, InfiniteLine, TextItem, SignalProxy
+
 
 OLLAMA_MODEL = "deepseek-r1:1.5b"
 
@@ -22,16 +42,16 @@ NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 # Modern design constants
 COLORS = {
-    "background": "#0F172A",    # Dark navy
-    "surface": "#1E293B",       # Soft blue-gray
+    "background": "#1e1e1e",    # Dark grey
+    "surface": "#474747",       # Soft grey
     "primary": "#6366F1",       # Indigo
-    "secondary": "#334155",     # Medium slate
+    "secondary": "#1e1e1e",     # Medium slate
     "accent": "#818CF8",        # Light indigo
     "text": "#F8FAFC",          # Off-white
     "text-secondary": "#94A3B8",# Gray-blue
     "positive": "#34D399",      # Mint green
     "negative": "#F87171",      # Coral red
-    "border": "#475569"         # Dark slate
+    "border": "#1e1e1e"         # Dark grey
 
 }
 # Yellow colour used for mid-range percentages
@@ -52,11 +72,11 @@ class StockOverview(QFrame):
         self.setObjectName("overview")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
-        
+
         self.ticker = QLabel("")
         self.ticker.setFont(QFont(FONT_FAMILY, 28, QFont.Bold))
         self.ticker.setStyleSheet(f"color: {COLORS['primary']}; margin-bottom: 8px;")
-        
+
         price_layout = QHBoxLayout()
         self.price = QLabel("")
         self.price.setFont(QFont(FONT_FAMILY, 32, QFont.Bold))
@@ -65,7 +85,7 @@ class StockOverview(QFrame):
         price_layout.addWidget(self.price)
         price_layout.addWidget(self.change)
         price_layout.addStretch()
-        
+
         layout.addWidget(self.ticker)
         layout.addLayout(price_layout)
         layout.addStretch()
@@ -77,50 +97,38 @@ class KeyMetrics(QFrame):
         self.setObjectName("metrics")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        
+        layout.setSpacing(8)
+
         title = QLabel("Key Metrics")
         title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
-        title.setStyleSheet(f"color: {COLORS['accent']}; margin-bottom: 12px;")
 
-        # Create grid layout for metrics
-        self.metrics_grid = QGridLayout()
-        self.metrics_grid.setVerticalSpacing(12)
-        self.metrics_grid.setHorizontalSpacing(24)
-
-        def update_metrics(self, metrics):
-            """Update metrics display with new data"""
-            # Clear existing metrics
-            for i in reversed(range(self.metrics_grid.count())):
-                widget = self.metrics_grid.itemAt(i).widget()
-                if widget:
-                    widget.deleteLater()
-
-            # Add new metrics with modern styling
-            row = 0
-            for label, value, color in metrics:
-                lbl = QLabel(label)
-                lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
-                lbl.setStyleSheet(f"color: {COLORS['text-secondary']};")
-                
-                val = QLabel(value)
-                val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
-                val.setStyleSheet(f"color: {color}; font-weight: 500;")
-                
-                self.metrics_grid.addWidget(lbl, row, 0)
-                self.metrics_grid.addWidget(val, row, 1)
-                row += 1
-
-        layout.addWidget(title)
-        layout.addLayout(self.metrics_grid)
-        layout.addStretch()
-        
         self.grid = QGridLayout()
-        self.grid.setVerticalSpacing(12)
-        self.grid.setHorizontalSpacing(24)
-        
+        self.grid.setVerticalSpacing(8)
+        self.grid.setHorizontalSpacing(16)
+
         layout.addWidget(title)
         layout.addLayout(self.grid)
         layout.addStretch()
+
+    def update_metrics(self, metrics):
+        # Clear previous metrics
+        for i in reversed(range(self.grid.count())):
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        # Add new metrics
+        for row, (label, value, color) in enumerate(metrics):
+            lbl = QLabel(label)
+            lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
+            lbl.setStyleSheet(f"color: {COLORS['text-secondary']}")
+
+            val = QLabel(value)
+            val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
+            val.setStyleSheet(f"color: {color}")
+
+            self.grid.addWidget(lbl, row, 0)
+            self.grid.addWidget(val, row, 1)
 
 class RecommendationWidget(QFrame):
     """
@@ -190,24 +198,25 @@ class AnalysisCard(QFrame):
         self.setObjectName("analysisCard")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        
+
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.header_label = QLabel(title)
         self.header_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
         self.header_label.setStyleSheet(f"color: {COLORS['accent']};")
-        
+
         self.btn_maximize = QPushButton()
         self.btn_maximize.setIcon(self.style().standardIcon(QStyle.SP_TitleBarMaxButton))
         self.btn_maximize.setFlat(True)
         self.btn_maximize.setFixedSize(28, 28)
-        
+        self.btn_maximize.clicked.connect(self._on_maximize_clicked)
+
         header_layout.addWidget(self.header_label)
         header_layout.addStretch()
         header_layout.addWidget(self.btn_maximize)
-        
+
         self.content = QTextEdit()
         self.content.setReadOnly(True)
         self.content.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
@@ -216,25 +225,201 @@ class AnalysisCard(QFrame):
             border-radius: 8px;
             padding: 16px;
         """)
-        
+
         layout.addWidget(header)
         layout.addWidget(self.content)
+
+    def _on_maximize_clicked(self):
+        self.clicked.emit(self.header_label.text(), self.content.toPlainText(), self.content.textColor().name())
 
 # Basic StockChart implementation using pyqtgraph
 class StockChart(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-        self.plot_widget = pg.PlotWidget()
-        layout.addWidget(self.plot_widget)
-
-        # Configure plot appearance
-        self.plot_widget.setBackground(COLORS["surface"])
-        self.plot_widget.showGrid(x=True, y=True)
-        self.plot_widget.getAxis("left").setPen(pg.mkPen(COLORS["text"]))
-        self.plot_widget.getAxis("bottom").setPen(pg.mkPen(COLORS["text"]))
-        
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Create graphics layout widget
+        self.grid = GraphicsLayoutWidget()
+        layout.addWidget(self.grid)
+        
+        # Add plots
+        self.price_plot = self.grid.addPlot(row=0, col=0)
+        self.volume_plot = self.grid.addPlot(row=1, col=0)
+
+        # Set row heights using GraphicsLayoutWidget's native methods
+        self.grid.ci.layout.setRowPreferredHeight(0, 300)  # Price plot
+        self.grid.ci.layout.setRowPreferredHeight(1, 100)  # Volume plot
+        self.grid.ci.layout.setSpacing(40)  # Space between plots
+
+        # Configure price plot
+        self.price_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.price_plot.setLabel('left', 'Price', units='$')
+        
+        # Configure volume plot
+        self.volume_plot.showGrid(x=True, y=True, alpha=0.3)
+        self.volume_plot.setLabel('left', 'Volume')
+        
+        # Link X axes
+        self.volume_plot.setXLink(self.price_plot)
+        
+        # Style axes
+        for plot in [self.price_plot, self.volume_plot]:
+            plot.getAxis('left').setPen(pg.mkPen(COLORS["text"]))
+            plot.getAxis('bottom').setPen(pg.mkPen(COLORS["text"]))
+            plot.getAxis('bottom').setTextPen(pg.mkPen(COLORS["text"]))
+            plot.getAxis('left').setTextPen(pg.mkPen(COLORS["text"]))
+
+        # Add crosshair
+        self.crosshair_v = InfiniteLine(angle=90, movable=False, 
+                                      pen=pg.mkPen(COLORS["text"], style=Qt.DashLine))
+        self.crosshair_h = InfiniteLine(angle=0, movable=False, 
+                                      pen=pg.mkPen(COLORS["text"], style=Qt.DashLine))
+        self.price_plot.addItem(self.crosshair_v, ignoreBounds=True)
+        self.price_plot.addItem(self.crosshair_h, ignoreBounds=True)
+        
+        # Add tracking label
+        self.tracking_text = TextItem(anchor=(0, 1), color=COLORS["text"], 
+                                    fill=pg.mkColor(COLORS["surface"]))
+        self.price_plot.addItem(self.tracking_text)
+        
+        # Connect mouse events
+        self.proxy = SignalProxy(self.price_plot.scene().sigMouseMoved, 
+                               rateLimit=60, slot=self.mouse_moved)
+
+    def mouse_moved(self, evt):
+        pos = evt[0]
+        if self.price_plot.sceneBoundingRect().contains(pos):
+            mouse_point = self.price_plot.vb.mapSceneToView(pos)
+            self.crosshair_v.setPos(mouse_point.x())
+            self.crosshair_h.setPos(mouse_point.y())
+            
+            # Convert timestamp to date
+            date = datetime.fromtimestamp(mouse_point.x()).strftime('%Y-%m-%d')
+            
+            # Update tracking text
+            if hasattr(self, 'candlesticks') and self.candlesticks.data is not None:
+                data = self.candlesticks.data
+                idx = np.abs(data['time'] - mouse_point.x()).argmin()
+                self.tracking_text.setText(
+                    f"{date}\n"
+                    f"Open: ${data['open'][idx]:.2f}\n"
+                    f"Close: ${data['close'][idx]:.2f}\n"
+                    f"High: ${data['high'][idx]:.2f}\n"
+                    f"Low: ${data['low'][idx]:.2f}"
+                )
+                self.tracking_text.setPos(mouse_point.x(), mouse_point.y())
+
+    def update_chart(self, ticker):
+        try:
+            # Get historical data
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="3mo")
+            
+            if hist.empty:
+                return
+
+            # Convert index to timestamps
+            dates = hist.index.view(np.int64) // 10**9
+            
+            # Create candlestick data
+            candlestick_data = np.zeros(len(hist), dtype=[
+                ('time', np.int64),
+                ('open', float),
+                ('close', float),
+                ('low', float),
+                ('high', float)
+            ])
+            
+            candlestick_data['time'] = dates
+            candlestick_data['open'] = hist['Open']
+            candlestick_data['close'] = hist['Close']
+            candlestick_data['low'] = hist['Low']
+            candlestick_data['high'] = hist['High']
+
+            # Clear previous items
+            self.price_plot.clear()
+            self.volume_plot.clear()
+
+            # Create candlesticks
+            self.candlesticks = pg.CandlestickItem(candlestick_data)
+            self.price_plot.addItem(self.candlesticks)
+
+            # Add volume bars
+            colors = [COLORS["positive"] if close >= open_ else COLORS["negative"] 
+                     for close, open_ in zip(hist['Close'], hist['Open'])]
+            
+            volume_bars = BarGraphItem(
+                x=dates,
+                height=hist['Volume'],
+                width=86400 * 0.8,  # 80% of one day in seconds
+                brushes=colors
+            )
+            self.volume_plot.addItem(volume_bars)
+            
+            # Add moving averages
+            sma20 = hist['Close'].rolling(window=20).mean()
+            sma50 = hist['Close'].rolling(window=50).mean()
+            
+            self.price_plot.plot(dates, sma20, pen=pg.mkPen(COLORS["accent"], width=1.5))
+            self.price_plot.plot(dates, sma50, pen=pg.mkPen(COLORS["primary"], width=1.5))
+            
+            # Auto-range the view
+            self.price_plot.autoRange()
+            self.volume_plot.setXLink(self.price_plot)
+
+        except Exception as e:
+            print(f"Chart error: {e}")
+
+    def _add_moving_averages(self, hist):
+        # Calculate moving averages
+        hist['SMA20'] = hist['Close'].rolling(window=20).mean()
+        hist['SMA50'] = hist['Close'].rolling(window=50).mean()
+        
+        # Plot SMAs
+        dates = hist.index.view(np.int64) // 10**9
+        self.price_plot.plot(dates, hist['SMA20'], 
+                           pen=pg.mkPen(COLORS["accent"], width=1.5), 
+                           name="20 SMA")
+        self.price_plot.plot(dates, hist['SMA50'], 
+                           pen=pg.mkPen(COLORS["secondary"], width=1.5), 
+                           name="50 SMA")
+
+    def _add_volume_bars(self, hist, dates):
+        # Create volume bars
+        colors = [COLORS["positive"] if close >= open_ else COLORS["negative"] 
+                for close, open_ in zip(hist['Close'], hist['Open'])]
+        
+        v_bars = pg.BarGraphItem(
+            x=dates,
+            height=hist['Volume'],
+            width=86400 * 0.8,  # 80% of daily interval (in seconds)
+            brushes=colors
+        )
+        self.volume_plot.addItem(v_bars)
+
+    def mouse_moved(self, evt):
+        pos = evt[0]
+        if self.price_plot.sceneBoundingRect().contains(pos):
+            mouse_point = self.price_plot.vb.mapSceneToView(pos)
+            self.crosshair_v.setPos(mouse_point.x())
+            self.crosshair_h.setPos(mouse_point.y())
+            
+            # Convert timestamp to date
+            date = datetime.fromtimestamp(mouse_point.x()).strftime('%Y-%m-%d')
+            
+            # Find nearest data point
+            if hasattr(self, 'candlesticks') and self.candlesticks.data is not None:
+                data = self.candlesticks.data
+                idx = np.abs(data['time'] - mouse_point.x()).argmin()
+                self.tracking_text.setText(
+                    f"{date}\n"
+                    f"Open: ${data['open'][idx]:.2f}\n"
+                    f"Close: ${data['close'][idx]:.2f}\n"
+                    f"High: ${data['high'][idx]:.2f}\n"
+                    f"Low: ${data['low'][idx]:.2f}"
+                )
+                self.tracking_text.setPos(mouse_point.x(), mouse_point.y())
 
     def update_chart(self, ticker):
         try:
@@ -260,7 +445,7 @@ class StockChart(QWidget):
                     y=[hist['Open'].iloc[i], hist['Close'].iloc[i]],
                     pen=pg.mkPen(color, width=3)
                 )
-                
+
                 # Draw wicks
                 wick = pg.PlotDataItem(
                     x=[i, i],
@@ -275,7 +460,7 @@ class StockChart(QWidget):
             dates = [d.strftime('%Y-%m-%d') for d in hist.index]
             ax = self.plot_widget.getAxis('bottom')
             ax.setTicks([[(i, date) for i, date in enumerate(dates)]])
-            
+
             # Auto-range the view
             self.plot_widget.autoRange()
 
@@ -290,7 +475,7 @@ class ModernStockApp(QMainWindow):
                 background-color: {COLORS['background']};
                 color: {COLORS['text']};
             }}
-            
+
             /* Unified card style */
             #overview, #metrics, #analysisCard, #recommendation, #chatBox {{
                 background-color: {COLORS['surface']};
@@ -307,16 +492,14 @@ class ModernStockApp(QMainWindow):
                 border-radius: 8px;
                 padding: 10px 20px;
                 font-weight: medium;
-                transition: all 0.2s;
             }}
-            
+
             QPushButton:hover {{
                 background-color: {COLORS['accent']};
-                transform: scale(1.02);
             }}
-            
+
             QPushButton:pressed {{
-                transform: scale(0.98);
+                background-color: {COLORS['primary']};
             }}
 
             /* Enhanced input fields */
@@ -329,7 +512,7 @@ class ModernStockApp(QMainWindow):
                 color: {COLORS['text']};
                 selection-background-color: {COLORS['primary']};
             }}
-            
+
             QLineEdit:focus {{
                 border-color: {COLORS['primary']};
             }}
@@ -339,7 +522,7 @@ class ModernStockApp(QMainWindow):
                 border: none;
                 background-color: transparent;
             }}
-            
+
             QTabBar::tab {{
                 background-color: transparent;
                 color: {COLORS['text-secondary']};
@@ -347,12 +530,12 @@ class ModernStockApp(QMainWindow):
                 font-weight: medium;
                 border-bottom: 3px solid transparent;
             }}
-            
+
             QTabBar::tab:selected {{
                 color: {COLORS['primary']};
                 border-bottom: 3px solid {COLORS['primary']};
             }}
-            
+
             QTabBar::tab:hover {{
                 color: {COLORS['accent']};
             }}
@@ -363,12 +546,12 @@ class ModernStockApp(QMainWindow):
                 border-radius: 12px;
                 padding: 12px;
             }}
-            
+
             QScrollArea {{
                 border: none;
                 background-color: transparent;
             }}
-            
+
             /* Message bubbles */
             .user-message {{
                 background-color: {COLORS['primary']};
@@ -377,7 +560,7 @@ class ModernStockApp(QMainWindow):
                 padding: 12px;
                 margin: 8px;
             }}
-            
+
             .ai-message {{
                 background-color: {COLORS['secondary']};
                 color: {COLORS['text']};
@@ -397,6 +580,8 @@ class ModernStockApp(QMainWindow):
         self.setMinimumSize(1024, 768)
         self.current_ticker = None
 
+        # Set window icon
+        self.setWindowIcon(QIcon(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.ico"))
         self.update_timer = QTimer(self)
         self.update_timer.setInterval(1000)
         self.update_timer.timeout.connect(self._update_ui)
@@ -431,7 +616,7 @@ class ModernStockApp(QMainWindow):
 
         logo_img = QLabel()
         try:
-            pixmap = QPixmap("attached_assets/Axlotto transparent.png")
+            pixmap = QPixmap(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.png")
             if not pixmap.isNull():
                 scaled_pixmap = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 logo_img.setPixmap(scaled_pixmap)
@@ -622,7 +807,7 @@ class ModernStockApp(QMainWindow):
         chat_layout = QVBoxLayout(chat_widget)
         chat_layout.setContentsMargins(12, 12, 12, 12)
         chat_layout.setSpacing(12)
-        
+
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
@@ -631,11 +816,11 @@ class ModernStockApp(QMainWindow):
             border-radius: 12px;
             padding: 16px;
         """)
-        
+
         input_widget = QWidget()
         input_layout = QHBoxLayout(input_widget)
         input_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText("Ask about this stock...")
         self.chat_input.setStyleSheet(f"""
@@ -643,7 +828,7 @@ class ModernStockApp(QMainWindow):
             border-radius: 8px;
             padding: 14px;
         """)
-        
+
         self.chat_send = QPushButton("➤")
         self.chat_send.setFixedSize(48, 48)
         self.chat_send.setStyleSheet(f"""
@@ -657,16 +842,16 @@ class ModernStockApp(QMainWindow):
                 background-color: {COLORS['accent']};
             }}
         """)
-        
+
         input_layout.addWidget(self.chat_input)
         input_layout.addWidget(self.chat_send)
-        
+
         chat_layout.addWidget(QLabel("<b>Stock Assistant</b>"))
         chat_layout.addWidget(self.chat_history)
         chat_layout.addWidget(input_widget)
-        
+
         return chat_widget
-    
+
     def _send_chat_message(self):
         if not self.current_ticker:
             return
@@ -706,7 +891,7 @@ class ModernStockApp(QMainWindow):
                     "content": user_input
                 }]
             )
-            
+
             self._append_chat_message("ai", response['message']['content'])
 
         except Exception as e:
@@ -831,7 +1016,7 @@ class ModernStockApp(QMainWindow):
                 border-color: {COLORS['primary']};
             }}
             """)
-            
+
             text = f"{ticker}\nPrice: ${price:.2f}\nChange: {change_pct:+.2f}%"
             container.setText(text)
             container.clicked.connect(lambda _, t=ticker: self._load_stock(t))
@@ -989,7 +1174,7 @@ class ModernStockApp(QMainWindow):
                         "content": prompt
                     }
                 ]
-                
+
             response = ollama.chat(
                 model=OLLAMA_MODEL,
                 messages=[{"role": m["role"], "content": m["content"]} for m in messages],
@@ -1012,7 +1197,7 @@ class ModernStockApp(QMainWindow):
     def _remove_think_tags(self, text):
         """Removes any text enclosed between <think> and </think> tags."""
         return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    
+
 
     def _long_term_prompt(self, stock):
         info = stock.info
@@ -1059,7 +1244,19 @@ Provide analysis covering:
 Keep response concise and action-oriented."""
 
     def _generate_buy_hold_sell(self, stock):
-        pass
+        try:
+            handler = TA_Handler(
+                symbol=self.current_ticker,
+                screener="america",
+                exchange="NASDAQ",
+                interval=Interval.INTERVAL_1_DAY
+            )
+            analysis = handler.get_analysis()
+            recs = self._parse_recommendations_from_text(str(analysis))
+            self.ai_recommendation.update_recommendations(recs)
+        except Exception as e:
+            print(f"Recommendation error: {e}")
+
 
     def _parse_recommendations_from_text(self, text):
         """
@@ -1124,9 +1321,9 @@ Keep response concise and action-oriented."""
     def _connect_signals(self):
         self.btn_analyze.clicked.connect(self._analyze)
         self.search.returnPressed.connect(self._analyze)
-        self.news_card.clicked.connect(self.show_maximized_card)
-        self.long_term_card.clicked.connect(self.show_maximized_card)
-        self.day_trade_card.clicked.connect(self.show_maximized_card)
+        self.news_card.clicked.connect(lambda title, text, color: self.show_maximized_card(title, text, color))
+        self.long_term_card.clicked.connect(lambda title, text, color: self.show_maximized_card(title, text, color))
+        self.day_trade_card.clicked.connect(lambda title, text, color: self.show_maximized_card(title, text, color))
         self.btn_home.clicked.connect(self._go_home)
 
     def _go_home(self):
@@ -1302,6 +1499,12 @@ class StockWorker(QObject):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Set application icon for taskbar/system tray
+    app_icon = QIcon(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.ico")
+    app.setWindowIcon(app_icon)
+
     window = ModernStockApp()
+    window.setWindowIcon(app_icon)
     window.show()
     sys.exit(app.exec())
