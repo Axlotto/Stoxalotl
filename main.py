@@ -284,19 +284,31 @@ class ModernStockApp(QMainWindow):
     def _create_analysis_tab(self):
         analysis_tab = QWidget()
         scroll = QScrollArea()
+        scroll.setWidgetResizable(True)  # Make scroll area resize its widget
+        
         content = QWidget()
         layout = QVBoxLayout(content)
+        layout.setContentsMargins(10, 10, 10, 10)  # Add some padding
+        layout.setSpacing(10)  # Space between cards
 
         self.news_card = AnalysisCard("Latest News")
         self.long_term_card = AnalysisCard("Buy/Sell Analysis")
         self.day_trade_card = AnalysisCard("Day Trading Analysis")
 
-        layout.addWidget(self.news_card)
-        layout.addWidget(self.long_term_card)
-        layout.addWidget(self.day_trade_card)
+        # Set size policies to make cards expand horizontally
+        for card in [self.news_card, self.long_term_card, self.day_trade_card]:
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            layout.addWidget(card)
 
+        layout.addStretch()  # Add stretch at the bottom to prevent unnecessary expansion
         scroll.setWidget(content)
-        self.tabs.addTab(scroll, "Analysis")
+        
+        # Create a layout for the tab itself
+        tab_layout = QVBoxLayout(analysis_tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins to use full space
+        tab_layout.addWidget(scroll)
+
+        self.tabs.addTab(analysis_tab, "Analysis")
 
     def _create_chart_tab(self):
         self.chart = StockChart()
