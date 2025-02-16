@@ -73,10 +73,9 @@ class StockWorker(QRunnable):
         summary = analysis.summary
         oscillators = analysis.oscillators
         moving_avgs = analysis.moving_averages
-
         return {
             'current_price': indicators.get("close"),
-            'metrics': self._get_metrics(analysis),
+            'metrics': self._get_metrics(analysis),  # Pass the analysis directly to _get_metrics
             'recommendation': {
                 'text': summary.get('RECOMMENDATION', 'N/A'),
                 'color': self._get_recommendation_color(summary)

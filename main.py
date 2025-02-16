@@ -302,9 +302,37 @@ class ModernStockApp(QMainWindow):
         self.chart = StockChart()
         self.tabs.addTab(self.chart, "Charts")
 
-    def _load_favorites(self, tickers):
-        # Implementation from original code
-        pass
+    def _load_favorites(self, tickers=None):
+        # Clear existing widgets in the favorites layout
+        for i in reversed(range(self.favorites_layout.count())):
+            widget = self.favorites_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        # If no tickers are provided, use the current favorite_tickers list
+        if tickers is None:
+            tickers = self.favorite_tickers
+
+        # Load the favorite stocks
+        for ticker in tickers:
+            try:
+                stock = self.stock_api.get_stock(ticker)
+                info = stock.info
+                current_price = info.get('currentPrice', 'N/A')
+                name = info.get('displayName', ticker)
+
+                # Create a widget to display the stock information
+                stock_widget = QWidget()
+                stock_layout = QVBoxLayout(stock_widget)
+                stock_label = QLabel(f"{name} ({ticker}): ${current_price:.2f}")
+                stock_layout.addWidget(stock_label)
+
+                # Add the stock widget to the favorites layout
+                self.favorites_layout.addWidget(stock_widget)
+            except Exception as e:
+                print(f"Error loading favorite stock {ticker}: {e}")
+                error_label = QLabel(f"Error loading {ticker}")
+                self.favorites_layout.addWidget(error_label)
 
     def _analyze(self):
         ticker = self.search.text().strip().upper()
@@ -348,6 +376,14 @@ class ModernStockApp(QMainWindow):
             stock = self.stock_api.get_stock(self.current_ticker)
             info = stock.info
 
+            # Check if info is None or empty
+            if not info:
+                print(f"Error: No data received from yfinance for {self.current_ticker}")
+                self.overview.ticker.setText(self.current_ticker)
+                self.overview.price.setText("N/A")
+                self.metrics.update_metrics({})
+                return
+
             # Update price and metrics
             current_price = info.get('currentPrice', 'N/A')
             prev_close = info.get('previousClose', 'N/A')
@@ -357,28 +393,38 @@ class ModernStockApp(QMainWindow):
 
             # Update metrics
             metrics = self._get_stock_metrics(stock)
-            # Convert metrics values to float64 if needed before passing to widgets
-            # metrics = {k: np.float64(v) if isinstance(v, (int, float)) else v for k, v in metrics.items()}
             self.metrics.update_metrics(metrics)
 
         except Exception as e:
             print(f"Update error: {e}")
 
     def _get_stock_metrics(self, stock):
-        # Implementation from original code
-        # Example:
         metrics = {}
-        # Ensure values are float64
-        # metrics['pe_ratio'] = np.float64(stock.info.get('trailingPE', 0))
+        info = stock.info  # Access stock info
+
+        # Check if info is None or empty
+        if not info:
+            print("Error: No stock info available")
+            return metrics
+
+        # Ensure values are float64 and handle missing keys
+        metrics['pe_ratio'] = np.float64(info.get('trailingPE', 0) or 0)
+        metrics['dividend_yield'] = np.float64(info.get('dividendYield', 0) or 0)
+        metrics['market_cap'] = np.float64(info.get('marketCap', 0) or 0)
+        metrics['volume'] = np.float64(info.get('volume', 0) or 0)
         return metrics
 
     def _update_news(self, ticker):
         try:
             news = self.stock_api.get_news(ticker)
-            news_text = "\n\n".join(
-                f"{article['title']}\n{article['description'] or 'No description'}"
-                for article in news['articles'][:3]
-            )
+            news_text = ""
+            for i, article in enumerate(news[:3]):
+                try:
+                    title = article.get('title', 'No Title')
+                    description = article.get('description', 'No Description')
+                    news_text += f"{title}\n{description}\n\n"
+                except Exception as e:
+                    news_text += f"Error processing article {i}: {str(e)}\n\n"
             self.news_card.content.setPlainText(news_text)
         except Exception as e:
             self.news_card.content.setPlainText(f"News error: {str(e)}")
@@ -411,14 +457,33 @@ class ModernStockApp(QMainWindow):
         self.ai_recommendation.update_recommendations(recs)
 
     def _create_long_term_prompt(self, stock, investment_amount, investment_timeframe):
-        # Implementation from original code
-        # Include investment_amount and investment_timeframe in the prompt
-        pass
+        ticker = stock.info.get('symbol', 'Unknown')
+        name = stock.info.get('displayName', 'Unknown')
+        industry = stock.info.get('industry', 'Unknown')
+        current_price = stock.info.get('currentPrice', 'Unknown')
+
+        prompt = f"""
+        Analyze the long-term investment potential of {name} (Ticker: {ticker}) in the {industry} industry.
+        The current stock price is ${current_price:.2f}.
+        I am planning to invest ${investment_amount:.2f} for a timeframe of {investment_timeframe} days.
+        Provide a detailed analysis covering potential growth factors, risks, and a final investment recommendation.
+        Also, provide a buy, hold, and sell suggestion.
+        """
+        return prompt
 
     def _create_day_trade_prompt(self, stock, investment_amount, investment_timeframe):
-        # Implementation from original code
-        # Include investment_amount and investment_timeframe in the prompt
-        pass
+        ticker = stock.info.get('symbol', 'Unknown')
+        name = stock.info.get('displayName', 'Unknown')
+        current_price = stock.info.get('currentPrice', 'Unknown')
+
+        prompt = f"""
+        Provide a day trading analysis for {name} (Ticker: {ticker}).
+        The current stock price is ${current_price:.2f}.
+        I am considering allocating ${investment_amount:.2f} for day trading over a period of {investment_timeframe} days.
+        Focus on potential entry and exit points, technical indicators, and risk management strategies.
+        Also, provide a buy, hold, and sell suggestion.
+        """
+        return prompt
 
     def _connect_signals(self):
         self.btn_analyze.clicked.connect(self._analyze)
@@ -427,9 +492,9 @@ class ModernStockApp(QMainWindow):
         self.btn_add_favorite.clicked.connect(self._add_to_favorites)
 
         # Connect card maximize signals
-        self.news_card.clicked.connect(self._show_maximized_card)
-        self.long_term_card.clicked.connect(self._show_maximized_card)
-        self.day_trade_card.clicked.connect(self._show_maximized_card)
+        self.news_card.maximize_signal.connect(self._show_maximized_card)
+        self.long_term_card.maximize_signal.connect(self._show_maximized_card)
+        self.day_trade_card.maximize_signal.connect(self._show_maximized_card)
 
         self.send_button.clicked.connect(self._send_chat_message)
 
@@ -443,10 +508,29 @@ class ModernStockApp(QMainWindow):
             self.favorite_tickers.append(self.current_ticker)
             self._load_favorites()
 
-    def _show_maximized_card(self, title, text, color):
+    def _show_maximized_card(self, card_data):
+        """
+        Show a maximized version of the analysis card
+        
+        Args:
+            card_data (dict): Dictionary containing card title and content
+        """
         dialog = QDialog(self)
-        # Implementation from original code
-        pass
+        dialog.setWindowTitle(card_data.get('title', 'Analysis'))
+        dialog.setMinimumSize(600, 400)
+        
+        layout = QVBoxLayout(dialog)
+        content = QTextEdit()
+        content.setPlainText(card_data.get('content', ''))
+        content.setReadOnly(True)
+        
+        layout.addWidget(content)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        
+        dialog.exec()
 
     def _show_error(self, message):
         QMessageBox.critical(self, "Error", message)

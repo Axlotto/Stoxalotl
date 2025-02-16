@@ -14,7 +14,12 @@ class StockAPI:
         Fetch stock data using yfinance
         """
         try:
-            return yf.Ticker(ticker)
+            stock = yf.Ticker(ticker)
+            # Fetch live data to ensure the ticker is valid and data is available
+            stock_info = stock.info
+            if not stock_info:
+                raise StockAPIError(f"No data found for ticker: {ticker}")
+            return stock
         except Exception as e:
             raise StockAPIError(f"Failed to fetch stock data: {str(e)}") from e
 

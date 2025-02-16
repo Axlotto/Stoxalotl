@@ -19,8 +19,6 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 import pyqtgraph as pg
 from pyqtgraph import PlotWidget, AxisItem
 
-from Testing import KeyMetrics, RecommendationWidget
-
 # Configuration
 NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"
 NEWS_API_URL = "https://newsapi.org/v2/everything"
@@ -69,6 +67,58 @@ FONT_SIZES = {
     "body": 12,
     "small": 10
 }
+
+class KeyMetrics(QFrame):
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("metrics")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        title = QLabel("Key Metrics")
+        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
+
+        self.grid = QGridLayout()
+        self.grid.setVerticalSpacing(8)
+        self.grid.setHorizontalSpacing(16)
+
+        layout.addWidget(title)
+        layout.addLayout(self.grid)
+        layout.addStretch()
+
+    def update_metrics(self, metrics):
+        # Clear previous metrics
+        for i in reversed(range(self.grid.count())):
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        # Add new metrics
+        for row, (key, value) in enumerate(metrics.items()):
+            lbl = QLabel(key)
+            lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
+            lbl.setStyleSheet(f"color: {THEMES['Dark']['text-secondary']}")
+
+            # Format the value appropriately
+            if isinstance(value, (int, float)):
+                if key == 'market_cap':
+                    formatted_value = f"${value/1e9:.2f}B"
+                elif key == 'volume':
+                    formatted_value = f"{value:,.0f}"
+                elif key == 'dividend_yield':
+                    formatted_value = f"{value:.2f}%"
+                else:
+                    formatted_value = f"{value:.2f}"
+            else:
+                formatted_value = str(value)
+
+            val = QLabel(formatted_value)
+            val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
+            val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
+
+            self.grid.addWidget(lbl, row, 0)
+            self.grid.addWidget(val, row, 1)
 
 class DateAxis(AxisItem):
     def tickStrings(self, values, scale):
@@ -159,40 +209,41 @@ class StockOverview(QFrame):
         self.change.setText(change)
 
 class AnalysisCard(QFrame):
-    clicked = Signal(str, str, str)
+    maximize_signal = Signal(dict)  # Add this signal definition
 
     def __init__(self, title):
         super().__init__()
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) # Make the card resizable
+        self.title = title
+        self.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.setLineWidth(2)
+        
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
         
-        header = QHBoxLayout()
+        # Title label
         self.title_label = QLabel(title)
-        self.title_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
+        self.title_label.setFont(QFont("Arial", 12, QFont.Bold))
         
-        self.toggle_btn = QPushButton("▼")
-        self.toggle_btn.setFixedSize(24, 24)
-        self.toggle_btn.setFlat(True)
-        
-        header.addWidget(self.title_label)
-        header.addStretch()
-        header.addWidget(self.toggle_btn)
-        
+        # Content text edit
         self.content = QTextEdit()
         self.content.setReadOnly(True)
-        self.content.setVisible(True)
-        self.content.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # Allow horizontal expansion
-        self.content.setMinimumWidth(200) # Set a minimum width
+        self.content.setMinimumHeight(100)
         
-        layout.addLayout(header)
+        layout.addWidget(self.title_label)
         layout.addWidget(self.content)
         
-        self.toggle_btn.clicked.connect(self.toggle_content)
-        
-    def toggle_content(self):
-        self.content.setVisible(not self.content.isVisible())
-        self.toggle_btn.setText("▲" if self.content.isVisible() else "▼")
+        # Make the card clickable
+        self.setMouseTracking(True)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event):
+        """Handle mouse click events"""
+        if event.button() == Qt.LeftButton:
+            # Emit signal with card data
+            self.maximize_signal.emit({
+                'title': self.title,
+                'content': self.content.toPlainText()
+            })
+        super().mousePressEvent(event)
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -218,6 +269,69 @@ class SettingsDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
         self.setLayout(layout)
+
+
+class RecommendationWidget(QFrame):
+    """
+    New widget to display the AI recommendation percentages for Buy, Hold, and Sell.
+    """
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("recommendation")
+        self.current_theme = "Dark"  # Add this line to initialize the current_theme attribute
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        title = QLabel("Suggestions")
+        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
+        layout.addWidget(title)
+
+        self.grid = QGridLayout()
+        self.grid.setVerticalSpacing(8)
+        self.grid.setHorizontalSpacing(16)
+        layout.addLayout(self.grid)
+        layout.addStretch()
+
+    def update_recommendations(self, recs):
+        """
+        Update the grid with recommendation percentages.
+        recs: a dictionary with keys 'Buy', 'Hold', 'Sell' and values as percentages (int)
+        """
+        # Clear previous entries
+        for i in reversed(range(self.grid.count())):
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        row = 0
+        for option in ["Buy", "Hold", "Sell"]:
+            lbl = QLabel(option)
+            lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
+            lbl.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
+
+            percentage = recs.get(option, 0)  # Default to 0 if not found
+            try:
+                percentage = int(percentage)  # Convert to integer
+                text_value = f"{percentage}%"
+
+                if percentage <= 35:
+                    color = THEMES[self.current_theme]['negative']  # Red
+                elif percentage <= 65:
+                    color = "yellow"
+                else:
+                    color = THEMES[self.current_theme]['positive']  # Green
+            except (ValueError, TypeError):
+                text_value = "N/A"
+                color = THEMES[self.current_theme]['text']
+
+            val = QLabel(text_value)
+            val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
+            val.setStyleSheet(f"color: {color}")
+
+            self.grid.addWidget(lbl, row, 0)
+            self.grid.addWidget(val, row, 1)
+            row += 1
 
 class ModernStockApp(QMainWindow):
     def __init__(self):
