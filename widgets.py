@@ -121,7 +121,17 @@ class KeyMetrics(QFrame):
             self.grid.addWidget(val, row, 1)
 
 class DateAxis(AxisItem):
-    def tickStrings(self, values, scale):
+    def tickStrings(self, values, scale, spacing):
+        """Convert timestamps to date strings.
+        
+        Args:
+            values: List of timestamp values
+            scale: The scale factor
+            spacing: The spacing between ticks
+        
+        Returns:
+            List of formatted date strings
+        """
         return [datetime.fromtimestamp(value).strftime("%m/%d") for value in values]
 
 class StockChart(PlotWidget):
@@ -341,7 +351,7 @@ class ModernStockApp(QMainWindow):
         self.current_ticker = None
         self.watchlist = self.settings.value("Watchlist", [])
         
-        self.setWindowTitle("Stock Analysis Pro")
+        self.setWindowTitle("Stoxalotl")
         self.setGeometry(100, 100, 1280, 800)
         self._setup_ui()
         self._apply_theme()
