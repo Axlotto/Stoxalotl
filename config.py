@@ -11,7 +11,10 @@ COLOR_PALETTES = {
         "text-secondary": "#BDBDBD",     # Light grey
         "positive": "#4CAF50",          # Green
         "negative": "#F44336",          # Red
-        "border": "#303030"           # Dark border
+        "border": "#303030",           # Dark border
+        "card_up": "#1e3320",           # Green background for uptrend
+        "card_down": "#3d1f1f",         # Red background for downtrend
+        "card_neutral": "#2d2d2d"       # Neutral background
     },
     "Light": {
         "background": "#FAFAFA",       # Off-white

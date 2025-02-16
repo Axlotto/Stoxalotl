@@ -157,27 +157,18 @@ class ModernStockApp(QMainWindow):
             logo_img.setPixmap(pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             print(f"Error: Could not load logo from {logo_path}")
+        
         self.logo = QLabel("Stoxalotl")
         self.logo.setFont(QFont(FONT_FAMILY, FONT_SIZES["title"], QFont.DemiBold))
         logo_layout.addWidget(logo_img)
         logo_layout.addWidget(self.logo)
 
-        # Search and input fields
-        self.search = QLineEdit()
-        self.search.setPlaceholderText("Enter stock ticker...")
-        self.investment_amount = QLineEdit(placeholderText="Investment amount ($)")
-        self.investment_timeframe = QLineEdit(placeholderText="Days to invest")
-        self.btn_analyze = QPushButton("Analyze")
-        self.btn_home = QPushButton("Return Home")
-        self.btn_home.hide()
-
-        # Add widgets to header
+        # Add just the logo container and home button
         header_layout.addWidget(logo_container)
         header_layout.addStretch()
-        header_layout.addWidget(self.search)
-        header_layout.addWidget(self.investment_amount)
-        header_layout.addWidget(self.investment_timeframe)
-        header_layout.addWidget(self.btn_analyze)
+        
+        self.btn_home = QPushButton("Return Home")
+        self.btn_home.hide()
         header_layout.addWidget(self.btn_home)
 
         parent_layout.addWidget(header)
@@ -186,47 +177,63 @@ class ModernStockApp(QMainWindow):
         home_page = QWidget()
         layout = QVBoxLayout(home_page)
         layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
 
-        # Logo
-        logo_label = QLabel("Stoxalotl")
-        logo_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["title"] + 8, QFont.Bold))
-        logo_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(logo_label)
+        # Analysis Input Section
+        input_widget = QWidget()
+        input_layout = QHBoxLayout(input_widget)
+        input_layout.setSpacing(10)
 
-        # Market Overview
-        market_overview_label = QLabel("Market Overview")
-        market_overview_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
-        layout.addWidget(market_overview_label)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Enter stock ticker...")
+        self.investment_amount = QLineEdit(placeholderText="Investment amount ($)")
+        self.investment_timeframe = QLineEdit(placeholderText="Days to invest")
+        self.btn_analyze = QPushButton("Analyze")
 
-        self.market_overview_widget = QWidget()
-        self.market_overview_layout = QHBoxLayout(self.market_overview_widget)
-        layout.addWidget(self.market_overview_widget)
-        self._load_market_data()
+        for widget in [self.search, self.investment_amount, self.investment_timeframe, self.btn_analyze]:
+            input_layout.addWidget(widget)
 
-        # Favorites section
+        layout.addWidget(input_widget)
+
+        # Market News Section
+        news_label = QLabel("Market News")
+        news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        layout.addWidget(news_label)
+
+        self.news_feed = QTextEdit()
+        self.news_feed.setReadOnly(True)
+        self.news_feed.setMaximumHeight(200)
+        layout.addWidget(self.news_feed)
+
+        # Favorite Stocks Section
         favorites_label = QLabel("Favorite Stocks")
-        favorites_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
+        favorites_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(favorites_label)
 
         self.favorites_scroll = QScrollArea()
         self.favorites_scroll.setWidgetResizable(True)
         self.favorites_content = QWidget()
         self.favorites_layout = QHBoxLayout(self.favorites_content)
+        self.favorites_layout.setSpacing(10)
         self.favorites_scroll.setWidget(self.favorites_content)
+        self.favorites_scroll.setMaximumHeight(150)
         layout.addWidget(self.favorites_scroll)
 
-        # News Feed
-        news_label = QLabel("Market News")
-        news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
-        layout.addWidget(news_label)
+        # Market Analysis Section
+        market_analysis_label = QLabel("Market Analysis")
+        market_analysis_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        layout.addWidget(market_analysis_label)
 
-        self.news_feed = QTextEdit()
-        self.news_feed.setReadOnly(True)
-        layout.addWidget(self.news_feed)
+        self.market_analysis = QTextEdit()
+        self.market_analysis.setReadOnly(True)
+        layout.addWidget(self.market_analysis)
+        
+        # Initial data load
         self._load_news_feed()
+        self._load_favorites(["AAPL", "MSFT", "GOOGL"])
+        self._load_market_analysis()
 
         self.stacked_widget.addWidget(home_page)
-        self._load_favorites(["AAPL", "MSFT", "GOOGL"])
 
     def _load_market_data(self):
         # Fetch data for major indices (S&P 500, NASDAQ, Dow Jones)
@@ -337,36 +344,69 @@ class ModernStockApp(QMainWindow):
         self.tabs.addTab(self.chart, "Charts")
 
     def _load_favorites(self, tickers=None):
-        # Clear existing widgets in the favorites layout
+        # Clear existing widgets
         for i in reversed(range(self.favorites_layout.count())):
             widget = self.favorites_layout.itemAt(i).widget()
-            if widget is not None:
+            if widget:
                 widget.deleteLater()
 
-        # If no tickers are provided, use the current favorite_tickers list
         if tickers is None:
             tickers = self.favorite_tickers
 
-        # Load the favorite stocks
         for ticker in tickers:
             try:
                 stock = self.stock_api.get_stock(ticker)
                 info = stock.info
                 current_price = info.get('currentPrice', 'N/A')
+                prev_close = info.get('previousClose', current_price)
                 name = info.get('displayName', ticker)
 
-                # Create a widget to display the stock information
-                stock_widget = QWidget()
-                stock_layout = QVBoxLayout(stock_widget)
-                stock_label = QLabel(f"{name} ({ticker}): ${current_price:.2f}")
-                stock_layout.addWidget(stock_label)
+                # Create stock card
+                card = QFrame()
+                card.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+                card.setLineWidth(1)
+                card_layout = QVBoxLayout(card)
 
-                # Add the stock widget to the favorites layout
-                self.favorites_layout.addWidget(stock_widget)
+                # Ticker label
+                ticker_label = QLabel(ticker)
+                ticker_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+                ticker_label.setAlignment(Qt.AlignCenter)
+
+                # Price label
+                price_label = QLabel(f"${current_price:.2f}")
+                price_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
+                price_label.setAlignment(Qt.AlignCenter)
+
+                # Set color based on trend
+                if current_price > prev_close:
+                    card.setStyleSheet("background-color: #1e3320; color: white;")
+                elif current_price < prev_close:
+                    card.setStyleSheet("background-color: #3d1f1f; color: white;")
+                else:
+                    card.setStyleSheet("background-color: #2d2d2d; color: white;")
+
+                card_layout.addWidget(ticker_label)
+                card_layout.addWidget(price_label)
+                
+                # Set fixed size for the card
+                card.setFixedSize(120, 80)
+                self.favorites_layout.addWidget(card)
+
             except Exception as e:
                 print(f"Error loading favorite stock {ticker}: {e}")
-                error_label = QLabel(f"Error loading {ticker}")
-                self.favorites_layout.addWidget(error_label)
+
+    def _load_market_analysis(self):
+        prompt = """
+        Provide a concise analysis of current market trends and the global economy.
+        Focus on major market indices, key economic indicators, and potential impacts on different sectors.
+        Include specific sector recommendations based on current conditions.
+        Keep the analysis under 500 words.
+        """
+        try:
+            response = self.ai_client.analyze(prompt, "economic analyst")
+            self.market_analysis.setPlainText(response['message']['content'])
+        except Exception as e:
+            self.market_analysis.setPlainText(f"Error generating market analysis: {str(e)}")
 
     def _analyze(self):
         ticker = self.search.text().strip().upper()
