@@ -1501,7 +1501,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Set application icon for taskbar/system tray
-    app_icon = QIcon(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.ico")
+    app_icon = QIcon(r"Axlotto transparent.ico")
     app.setWindowIcon(app_icon)
 
     window = ModernStockApp()

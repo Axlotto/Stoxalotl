@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QStackedWidget,
-    QSizePolicy
+    QSizePolicy,
+    QSystemTrayIcon
 )
 import pyqtgraph as pg
 import numpy as np  # Import numpy
@@ -48,6 +49,23 @@ from widgets import StockOverview
 class ModernStockApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Store icon path as class variable using os.path for cross-platform compatibility
+        self.app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                         "assetes", "Axlotto transparent.ico")
+        self.app_icon = QIcon(self.app_icon_path)
+        
+        # Set window icon with better error handling
+        if self.app_icon.isNull():
+            print(f"Error: Could not load icon from {self.app_icon_path}")
+        else:
+            self.setWindowIcon(self.app_icon)
+        
+        # Create system tray icon
+        self.tray_icon = QSystemTrayIcon(self.app_icon, self)
+        self.tray_icon.setToolTip("Stoxalotl")
+        if not self.app_icon.isNull():
+            self.tray_icon.show()
+        
         self.setWindowTitle("Stock Analysis Pro")
         self.setGeometry(100, 100, 1280, 800)
         self.setMinimumSize(1024, 768)
@@ -132,9 +150,13 @@ class ModernStockApp(QMainWindow):
         logo_container = QWidget()
         logo_layout = QHBoxLayout(logo_container)
         logo_img = QLabel()
-        pixmap = QPixmap(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.png")
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                                "assetes", "Axlotto transparent.png")
+        pixmap = QPixmap(logo_path)
         if not pixmap.isNull():
             logo_img.setPixmap(pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            print(f"Error: Could not load logo from {logo_path}")
         self.logo = QLabel("Stoxalotl")
         self.logo.setFont(QFont(FONT_FAMILY, FONT_SIZES["title"], QFont.DemiBold))
         logo_layout.addWidget(logo_img)
@@ -528,6 +550,7 @@ class ModernStockApp(QMainWindow):
             card_data (dict): Dictionary containing card title and content
         """
         dialog = QDialog(self)
+        dialog.setWindowIcon(self.app_icon)  # Set icon for dialog
         dialog.setWindowTitle(card_data.get('title', 'Analysis'))
         dialog.setMinimumSize(600, 400)
         
@@ -545,7 +568,12 @@ class ModernStockApp(QMainWindow):
         dialog.exec()
 
     def _show_error(self, message):
-        QMessageBox.critical(self, "Error", message)
+        error_dialog = QMessageBox(self)
+        error_dialog.setWindowIcon(self.app_icon)  # Set icon for error dialog
+        error_dialog.setIcon(QMessageBox.Critical)
+        error_dialog.setWindowTitle("Error")
+        error_dialog.setText(message)
+        error_dialog.exec()
 
     def _send_chat_message(self):
         message = self.chat_input.text()
@@ -558,7 +586,16 @@ class ModernStockApp(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon(r"C:\Users\taylo\OneDrive\Desktop\Code\Axlotto transparent.ico"))
+    
+    # Set application-wide icon using the same path as in the class
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 
+                            "assetes", "Axlotto transparent.ico")
+    app_icon = QIcon(icon_path)
+    if not app_icon.isNull():
+        app.setWindowIcon(app_icon)
+    else:
+        print(f"Error: Could not load application icon from {icon_path}")
+    
     window = ModernStockApp()
     window.show()
     sys.exit(app.exec())
