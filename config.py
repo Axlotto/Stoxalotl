@@ -61,7 +61,8 @@ FONT_SIZES = {
 }
 
 # AI Configuration
-OLLAMA_MODEL = "deepseek-r1:1.5b"
+OLLAMA_MODEL = "deepseek-r1:1.5b"  # Default model for general analysis
+CHAT_MODEL = "llama3.2:1b"       # Model specifically for chat interactions
 
 # News API Configuration
 NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"  # Replace with your actual key

@@ -80,23 +80,33 @@ class StockAPI:
             raise StockAPIError(f"Technical analysis failed: {str(e)}") from e
 
 class AIClient:
-    def __init__(self, model="deepseek-r1:1.5b"):
-        self.model = model
+    def __init__(self, model=OLLAMA_MODEL):
+        self.default_model = model
+        self._ensure_model_available(model)
 
-    def analyze(self, prompt, role):
-        """
-        Analyzes the given prompt using the specified AI model.
-
-        Args:
-            prompt (str): The input prompt for the AI.
-            role (str): The role or persona for the AI to adopt.
-
-        Returns:
-            dict: The AI's response in JSON format.
-        """
+    def _ensure_model_available(self, model_name):
+        """Ensure the model is pulled and available"""
         try:
+            # Try to get model info - this will fail if model isn't pulled
+            ollama.show(model_name)
+        except Exception as e:
+            if "not found" in str(e):
+                print(f"Model {model_name} not found. Pulling now...")
+                try:
+                    ollama.pull(model_name)
+                    print(f"Successfully pulled model {model_name}")
+                except Exception as pull_error:
+                    print(f"Error pulling model: {pull_error}")
+                    raise
+
+    def analyze(self, prompt, role, model=None):
+        """Analyzes the given prompt using the specified AI model."""
+        try:
+            model_to_use = model or self.default_model
+            self._ensure_model_available(model_to_use)
+            
             response = ollama.chat(
-                model=self.model,
+                model=model_to_use,
                 messages=[
                     {
                         'role': 'system',
