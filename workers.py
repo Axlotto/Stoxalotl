@@ -5,12 +5,11 @@ from typing import Dict, List, Tuple, Optional
 import time
 import logging
 from config import COLORS
-
+import yfinance as yf
 class StockWorkerSignals(QObject):
     finished = Signal(dict)  # Processed stock data
     metrics_updated = Signal(list)  # Formatted metrics list
     error = Signal(str)  # Error messages
-
 class StockWorker(QRunnable):
     def __init__(self, ticker: str):
         super().__init__()
@@ -23,7 +22,6 @@ class StockWorker(QRunnable):
         
         # Configure automatic signal connection
         self.setAutoDelete(True)
-
     def run(self):
         """Main worker execution loop"""
         while self._active:
@@ -48,11 +46,9 @@ class StockWorker(QRunnable):
             except Exception as e:
                 self.signals.error.emit(f"Worker error: {str(e)}")
                 time.sleep(5)  # Backoff on errors
-
     def stop(self):
         """Gracefully stop the worker"""
         self._active = False
-
     def _get_technical_analysis(self) -> Optional[Dict]:
         """Fetch TA data from TradingView"""
         try:
@@ -66,7 +62,6 @@ class StockWorker(QRunnable):
         except Exception as e:
             self.signals.error.emit(f"TA fetch failed: {str(e)}")
             return None
-
     def _process_analysis(self, analysis: Dict) -> Dict:
         """Convert raw analysis to processed data"""
         indicators = analysis.indicators
@@ -91,7 +86,6 @@ class StockWorker(QRunnable):
                 }
             }
         }
-
     def _get_metrics(self, analysis: Dict) -> List[Tuple[str, str, str]]:
         """Convert analysis to metrics format for UI"""
         indicators = analysis.indicators
@@ -109,11 +103,9 @@ class StockWorker(QRunnable):
             ("MACD", self._format_macd(indicators), COLORS['text']),
             ("Stochastic", self._format_stochastic(indicators), COLORS['text'])
         ]
-
     # Formatting helper methods
     def _format_price(self, value: Optional[float]) -> str:
         return f"${value:.2f}" if value is not None else "N/A"
-
     def _get_price_change(self, indicators: Dict) -> str:
         close = indicators.get("close")
         open_price = indicators.get("open")
@@ -122,14 +114,12 @@ class StockWorker(QRunnable):
             pct_change = (change / open_price) * 100
             return f"{change:+.2f} ({pct_change:+.2f}%)"
         return "N/A"
-
     def _get_change_color(self, indicators: Dict) -> str:
         close = indicators.get("close")
         open_price = indicators.get("open")
         if close and open_price:
             return COLORS['positive'] if close >= open_price else COLORS['negative']
         return COLORS['text']
-
     def _get_recommendation_color(self, summary: Dict) -> str:
         rec = summary.get('RECOMMENDATION', '').upper()
         if 'STRONG_BUY' in rec:
@@ -141,18 +131,15 @@ class StockWorker(QRunnable):
         if 'SELL' in rec:
             return "#FF6961"  # Light red
         return COLORS['text']
-
     def _format_rsi(self, rsi: Optional[float]) -> str:
         if rsi is not None:
             strength = "Overbought" if rsi > 70 else "Oversold" if rsi < 30 else "Neutral"
             return f"{rsi:.2f} ({strength})"
         return "N/A"
-
     def _get_rsi_color(self, rsi: Optional[float]) -> str:
         if rsi is None:
             return COLORS['text']
         return COLORS['negative'] if rsi > 70 else COLORS['positive'] if rsi < 30 else COLORS['text']
-
     def _format_macd(self, indicators: Dict) -> str:
         macd = indicators.get("MACD.macd")
         signal = indicators.get("MACD.signal")
@@ -160,19 +147,16 @@ class StockWorker(QRunnable):
         if all(v is not None for v in [macd, signal, hist]):
             return f"{macd:.2f}/{signal:.2f} ({hist:+.2f})"
         return "N/A"
-
     def _format_stochastic(self, indicators: Dict) -> str:
         k = indicators.get("Stoch.K")
         d = indicators.get("Stoch.D")
         if k and d:
             return f"{k:.2f}/{d:.2f}"
         return "N/A"
-
 class WorkerManager:
     def __init__(self):
         self.thread_pool = QThreadPool.globalInstance()
         self.active_workers = {}
-
     def start_worker(self, ticker: str):
         """Start a new worker for a ticker"""
         if ticker in self.active_workers:
@@ -181,7 +165,6 @@ class WorkerManager:
         worker = StockWorker(ticker)
         self.active_workers[ticker] = worker
         self.thread_pool.start(worker)
-
     def stop_worker(self, ticker: str):
         """Stop a running worker"""
         if ticker in self.active_workers:

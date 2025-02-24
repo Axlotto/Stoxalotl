@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QTextEdit, QMessageBox,
     QGridLayout, QStyle, QTabWidget, QFrame, QScrollArea,
     QDialog, QDialogButtonBox, QStackedWidget, QSizePolicy,
-    QComboBox, QToolBar, QMenuBar, QMenu, QFormLayout, QSlider
+    QComboBox, QToolBar, QMenuBar, QMenu, QFormLayout, QSlider,
+    QGraphicsProxyWidget
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QSettings, QUrl
 from PySide6.QtGui import QFont, QColor, QActionGroup, QAction
@@ -169,17 +170,217 @@ class StockChart(PlotWidget):
         self.setAntialiasing(True)
         self.legend = self.addLegend()
         
-        # Lock the view box
-        self.getViewBox().setMouseEnabled(x=False, y=False)
+        # Setup view box for proper mouse interaction
+        view_box = self.getViewBox()
+        view_box.setMouseMode(pg.ViewBox.PanMode)  # Change to PanMode
+        view_box.enableAutoRange(enable=True)
+        view_box.setAutoVisible(y=True)
+        view_box.setLimits(xMin=None, xMax=None, yMin=None, yMax=None)  # Remove limits
         
-        # Add text items for peak labels
-        self.peak_labels = []
+        # Enable all mouse interactions
+        view_box.setMouseEnabled(x=True, y=True)
+        view_box.mouseDragEvent = self._mouseDragEvent  # Custom drag handler
+        self.setMouseEnabled(x=True, y=True)
+        
+        # Add mouse interactions hint
+        self.hint_text = pg.TextItem(
+            text="Mouse Controls:\n" + 
+                 "- Left click drag to pan\n" +
+                 "- Mouse wheel to zoom\n" + 
+                 "- Double-click to reset view",
+            color=THEMES["Dark"]["text-secondary"],
+            anchor=(0, 0)
+        )
+        
+        # Store view state and ranges
+        self.last_view_state = None
+        self.original_range = {'x': None, 'y': None}
         
         # Add storage for technical indicators
         self.support_lines = []
         self.resistance_lines = []
         self.peak_labels = []
         self.period_peaks = {}
+        
+        # Add control buttons
+        self._add_control_buttons()
+
+        # Add visibility flags
+        self.show_peaks = True
+        self.show_support_resistance = True
+        self.show_markers = True
+        
+        # Add visibility controls
+        self._add_visibility_controls()
+        
+        # Initialize drag state
+        self._is_dragging = False
+        self._last_pos = None
+
+    def _add_control_buttons(self):
+        """Add control buttons to the chart"""
+        # Create container widget for buttons
+        proxy = QGraphicsProxyWidget()  # Using PySide6 QGraphicsProxyWidget
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setSpacing(4)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create buttons
+        buttons = [
+            ('+', self.zoomIn),
+            ('-', self.zoomOut),
+            ('⟲', self.resetZoom)
+        ]
+
+        for text, callback in buttons:
+            btn = QPushButton(text)
+            btn.setFixedSize(25, 25)
+            btn.clicked.connect(callback)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #2d2d2d;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #3d3d3d;
+                }
+                QPushButton:pressed {
+                    background-color: #1d1d1d;
+                }
+            """)
+            layout.addWidget(btn)
+
+        # Add the buttons to the chart
+        proxy.setWidget(widget)
+        self.scene().addItem(proxy)
+        proxy.setPos(60, 20)
+        proxy.setZValue(100)  # Ensure buttons are above chart
+
+    def _add_visibility_controls(self):
+        """Add buttons to toggle visibility of different markers"""
+        control_proxy = QGraphicsProxyWidget()
+        control_widget = QWidget()
+        control_layout = QHBoxLayout(control_widget)
+        control_layout.setSpacing(4)
+        control_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create toggle buttons with style
+        button_style = """
+            QPushButton {
+                background-color: transparent;
+                color: #858585;
+                border: none;
+            }
+            QPushButton:checked {
+                color: white;
+                font-weight: bold;
+            }
+        """
+
+        toggles = [
+            ('📊', 'Peak Markers', lambda: self._toggle_visibility('peaks')),
+            ('📈', 'Support/Resistance', lambda: self._toggle_visibility('levels')),
+            ('🏷️', 'Labels', lambda: self._toggle_visibility('markers'))
+        ]
+
+        for icon, tooltip, callback in toggles:
+            btn = QPushButton(icon)
+            btn.setFixedSize(25, 25)
+            btn.setToolTip(tooltip)
+            btn.setCheckable(True)  # Make button toggleable
+            btn.setChecked(True)    # Start checked
+            btn.setStyleSheet(button_style)
+            btn.clicked.connect(callback)
+            control_layout.addWidget(btn)
+
+        # Position controls in top-right corner
+        control_proxy.setWidget(control_widget)
+        self.scene().addItem(control_proxy)
+        control_proxy.setPos(self.width() - 120, 20)
+
+    def _toggle_visibility(self, marker_type):
+        """Toggle visibility of different marker types"""
+        if marker_type == 'peaks':
+            self.show_peaks = not self.show_peaks
+            for label in self.peak_labels:
+                label.setVisible(self.show_peaks)
+                
+        elif marker_type == 'levels':
+            self.show_support_resistance = not self.show_support_resistance
+            for line in self.support_lines + self.resistance_lines:
+                line.setVisible(self.show_support_resistance)
+                
+        elif marker_type == 'markers':
+            self.show_markers = not self.show_markers
+            # Toggle all markers
+            for item in self.peak_labels + self.support_lines + self.resistance_lines:
+                item.setVisible(self.show_markers)
+
+    def zoomIn(self):
+        """Zoom in by 25%"""
+        self.getViewBox().scaleBy((0.75, 0.75))
+
+    def zoomOut(self):
+        """Zoom out by 25%"""
+        self.getViewBox().scaleBy((1.25, 1.25))
+
+    def resetZoom(self):
+        """Reset to original view"""
+        if self.original_range['x'] is not None and self.original_range['y'] is not None:
+            self.getViewBox().setRange(xRange=self.original_range['x'], yRange=self.original_range['y'])
+
+    def wheelEvent(self, event):
+        """Handle mouse wheel events for zooming"""
+        # Get the position of the mouse in view coordinates
+        pos = self.getViewBox().mapSceneToView(event.position())
+        
+        # Calculate zoom factor
+        factor = 0.9 if event.angleDelta().y() > 0 else 1.1
+        
+        # Apply zoom centered on mouse position
+        self.getViewBox().scaleBy((factor, factor), pos)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._is_dragging = True
+            self._last_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._is_dragging = False
+            self._last_pos = None
+            self.setCursor(Qt.ArrowCursor)
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._is_dragging and self._last_pos is not None:
+            delta = event.pos() - self._last_pos
+            self._last_pos = event.pos()
+            
+            # Convert screen pixels to view coordinates
+            view_box = self.getViewBox()
+            x_scale = view_box.viewRect().width() / self.width()
+            y_scale = view_box.viewRect().height() / self.height()
+            
+            # Apply the pan
+            view_box.translateBy(x=delta.x() * x_scale, y=delta.y() * y_scale)
+        event.accept()
+
+    def _mouseDragEvent(self, ev):
+        """Custom drag event handler"""
+        if ev.button() == Qt.LeftButton:
+            ev.accept()
+            pos = ev.pos()
+            lastPos = ev.lastPos()
+            dif = pos - lastPos
+            self.getViewBox().translateBy(dif)
+        else:
+            ev.ignore()
 
     def _calculate_support_resistance(self, closes, window=20):
         """Calculate support and resistance levels"""
@@ -371,10 +572,44 @@ class StockChart(PlotWidget):
             low_label.setPos(dates[-1], data['low'])
             self.peak_labels.append(low_label)
 
-        # Update view range
-        y_min = min(closes) * 0.95
-        y_max = max(closes) * 1.05
-        self.setYRange(y_min, y_max)
+        # Store the initial range for reset functionality
+        self.original_range = {
+            'x': (min(dates), max(dates)),
+            'y': (y_min, y_max)
+        }
+        
+        # Set initial view without locking it
+        self.getViewBox().setRange(
+            xRange=(min(dates), max(dates)),
+            yRange=(y_min, y_max),
+            padding=0.1
+        )
+        
+        # Add control hint
+        self.addItem(self.hint_text)
+        self.hint_text.setPos(dates[0], y_max)
+
+        # Store initial view state
+        self.last_view_state = self.getViewBox().getState()
+        
+        # Set initial range but don't lock it
+        self.setXRange(min(dates), max(dates), padding=0.1)
+        self.setYRange(y_min, y_max, padding=0.1)
+
+        # Add items with visibility respect
+        if self.show_peaks:
+            for label in self.peak_labels:
+                label.setVisible(True)
+        else:
+            for label in self.peak_labels:
+                label.setVisible(False)
+
+        if self.show_support_resistance:
+            for line in self.support_lines + self.resistance_lines:
+                line.setVisible(True)
+        else:
+            for line in self.support_lines + self.resistance_lines:
+                line.setVisible(False)
 
 class StockOverview(QFrame):
     def __init__(self):
@@ -383,18 +618,35 @@ class StockOverview(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         
+        # Header with ticker and star button
         header = QHBoxLayout()
+        
+        # Ticker label
         self.ticker = QLabel()
         self.ticker.setFont(QFont(FONT_FAMILY, 24, QFont.Bold))
         
+        # Star button for watchlist with improved styling
         self.watchlist_btn = QPushButton("☆")
         self.watchlist_btn.setCheckable(True)
         self.watchlist_btn.setFixedSize(32, 32)
-        self.watchlist_btn.setStyleSheet("QPushButton { font-size: 20px; }")
+        self.watchlist_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 20px;
+                color: #858585;
+                background: transparent;
+                border: none;
+            }
+            QPushButton:checked {
+                color: #FFD700;  /* Gold color for active state */
+            }
+            QPushButton:hover {
+                color: #FFFFFF;
+            }
+        """)
         
         header.addWidget(self.ticker)
-        header.addStretch()
         header.addWidget(self.watchlist_btn)
+        header.addStretch()
         
         self.price = QLabel()
         self.price.setFont(QFont(FONT_FAMILY, 28, QFont.Medium))
@@ -407,10 +659,13 @@ class StockOverview(QFrame):
         layout.addWidget(self.change)
         layout.addStretch()
 
-    def update_overview(self, ticker, price, change):
+    def update_overview(self, ticker, price, change, is_favorite=False):
         self.ticker.setText(ticker)
         self.price.setText(f"${price:.2f}")
         self.change.setText(change)
+        # Update button state and text based on favorite status
+        self.watchlist_btn.setChecked(is_favorite)
+        self.watchlist_btn.setText("★" if is_favorite else "☆")
 
 class AnalysisCard(QFrame):
     maximize_signal = Signal(dict)  # Add this signal definition
@@ -510,7 +765,7 @@ class RecommendationWidget(QFrame):
         
         # Add period highs and lows
         for period in ['1D', '1W', '1M', '3M', '6M', '1Y']:
-            if period in data['peaks']:
+            if period in data.get('peaks', {}):
                 # Period label
                 period_label = QLabel(period)
                 period_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Bold))
@@ -559,6 +814,24 @@ class RecommendationWidget(QFrame):
             resistance_value.setStyleSheet(f"color: {THEMES[self.current_theme]['negative']}")
             self.grid.addWidget(resistance_label, row, 0)
             self.grid.addWidget(resistance_value, row, 1)
+
+    def update_recommendations(self, recommendations):
+        """
+        Update the widget with new recommendations.
+        """
+        # Clear previous entries
+        for i in reversed(range(self.grid.count())):
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        row = 0
+        for rec in recommendations:
+            label = QLabel(rec)
+            label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
+            label.setStyleSheet(f"color: {THEMES[self.current_theme]['text']}")
+            self.grid.addWidget(label, row, 0, 1, 2)
+            row += 1
 
 class ModernStockApp(QMainWindow):
     def __init__(self):

@@ -11,10 +11,7 @@ COLOR_PALETTES = {
         "text-secondary": "#BDBDBD",     # Light grey
         "positive": "#4CAF50",          # Green
         "negative": "#F44336",          # Red
-        "border": "#303030",           # Dark border
-        "card_up": "#1e3320",           # Green background for uptrend
-        "card_down": "#3d1f1f",         # Red background for downtrend
-        "card_neutral": "#2d2d2d"       # Neutral background
+        "border": "#303030"           # Dark border
     },
     "Light": {
         "background": "#FAFAFA",       # Off-white
@@ -61,12 +58,16 @@ FONT_SIZES = {
 }
 
 # AI Configuration
-OLLAMA_MODEL = "deepseek-r1:1.5b"  # Default model for general analysis
-CHAT_MODEL = "llama3.2:1b"       # Model specifically for chat interactions
+OLLAMA_MODEL = "deepseek-r1:1.5b"
+CHAT_MODEL = "llama3.2:1b"  # Add this line
 
 # News API Configuration
 NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"  # Replace with your actual key
 NEWS_API_URL = "https://newsapi.org/v2/everything"
+
+# Alpha Vantage API Configuration
+ALPHA_VANTAGE_API_KEY = "3Q4S7JWD4LYZRUCI"  # Replace with your actual key
+ALPHA_VANTAGE_API_URL = "https://www.alphavantage.co/query"
 
 # Chart Configuration - More options
 CHART_CONFIG = {

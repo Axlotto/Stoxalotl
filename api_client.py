@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from tradingview_ta import TA_Handler, Interval
 from typing import Dict, List, Optional, Union
 from config import NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
-
 class StockAPI:
     @staticmethod
     def get_stock(ticker: str) -> yf.Ticker:
@@ -22,7 +21,6 @@ class StockAPI:
             return stock
         except Exception as e:
             raise StockAPIError(f"Failed to fetch stock data: {str(e)}") from e
-
     @staticmethod
     def get_news(ticker: str, days_back: int = 3, num_articles: int = 3) -> List[Dict]:
         """
@@ -51,7 +49,6 @@ class StockAPI:
             raise StockAPIError(f"News request failed: {str(e)}") from e
         except Exception as e:
             raise StockAPIError(f"News processing error: {str(e)}") from e
-
     @staticmethod
     def get_recommendations(
         ticker: str,
@@ -78,12 +75,10 @@ class StockAPI:
             }
         except Exception as e:
             raise StockAPIError(f"Technical analysis failed: {str(e)}") from e
-
 class AIClient:
     def __init__(self, model=OLLAMA_MODEL):
         self.default_model = model
         self._ensure_model_available(model)
-
     def _ensure_model_available(self, model_name):
         """Ensure the model is pulled and available"""
         try:
@@ -98,7 +93,6 @@ class AIClient:
                 except Exception as pull_error:
                     print(f"Error pulling model: {pull_error}")
                     raise
-
     def analyze(self, prompt, role, model=None):
         """Analyzes the given prompt using the specified AI model."""
         try:
@@ -122,7 +116,6 @@ class AIClient:
         except Exception as e:
             print(f"Error during AI analysis: {e}")
             return {'message': {'content': f"Analysis failed: {str(e)}"}}
-
     @staticmethod
     def generate_analysis(
         prompt: str,
@@ -138,7 +131,6 @@ class AIClient:
             {"role": "user", "content": prompt}
         ]
         return AIClient._chat_with_retry(messages, model, max_retries)
-
     @staticmethod
     def generate_chat_response(
         messages: List[Dict],
@@ -149,7 +141,6 @@ class AIClient:
         Generate conversational AI response
         """
         return AIClient._chat_with_retry(messages, model, max_retries)
-
     @staticmethod
     def _chat_with_retry(
         messages: List[Dict],
@@ -168,11 +159,9 @@ class AIClient:
                     raise AIClientError(f"AI request failed after {max_retries} attempts: {str(e)}") from e
                 continue
         raise AIClientError("Unexpected error in AI communication")
-
 class StockAPIError(Exception):
     """Custom exception for Stock API errors"""
     pass
-
 class AIClientError(Exception):
     """Custom exception for AI client errors"""
     pass
