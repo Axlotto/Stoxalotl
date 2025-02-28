@@ -69,6 +69,10 @@ NEWS_API_URL = "https://newsapi.org/v2/everything"
 ALPHA_VANTAGE_API_KEY = "3Q4S7JWD4LYZRUCI"  # Replace with your actual key
 ALPHA_VANTAGE_API_URL = "https://www.alphavantage.co/query"
 
+# Finnhub API Configuration
+FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"
+FINNHUB_API_URL = "https://finnhub.io/api/v1"
+
 # Chart Configuration - More options
 CHART_CONFIG = {
     "default_period": "3mo",       # Default historical data period

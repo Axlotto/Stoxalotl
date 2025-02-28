@@ -1,8 +1,7 @@
-
 import time
 
 class Cache:
-    def __init__(self, ttl=300):
+    def __init__(self, ttl=600):  # Increase TTL to 10 minutes
         self.ttl = ttl  # Time-to-live for cache entries in seconds
         self.cache = {}
 

@@ -1,73 +1,99 @@
 # api_client.py
-import yfinance as yf
-import ollama
 import requests
 from datetime import datetime, timedelta
 from tradingview_ta import TA_Handler, Interval
 from typing import Dict, List, Optional, Union
-from config import NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
+from config import FINNHUB_API_KEY, FINNHUB_API_URL, NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
 from cache import Cache
+import ollama  # Add this import
+import time  # Add this import
 
 # Initialize cache with a TTL of 5 minutes
 cache = Cache(ttl=300)
 
 class StockAPI:
-    @staticmethod
-    def get_stock(ticker: str) -> yf.Ticker:
-        """
-        Fetch stock data using yfinance with caching
-        """
+    def __init__(self, request_counter=None):
+        self.request_counter = request_counter
+
+    def get_stock(self, ticker: str, retries: int = 3, backoff_factor: float = 0.3) -> Dict:
+        """Fetch stock data using Finnhub API with caching and retry mechanism"""
         cache_key = f"stock_{ticker}"
         cached_data = cache.get(cache_key)
+        
         if cached_data:
+            if self.request_counter:
+                self.request_counter.increment_cache()
             return cached_data
 
-        try:
-            stock = yf.Ticker(ticker)
-            # Fetch live data to ensure the ticker is valid and data is available
-            stock_info = stock.info
-            if not stock_info:
-                raise StockAPIError(f"No data found for ticker: {ticker}")
-            cache.set(cache_key, stock)
-            return stock
-        except Exception as e:
-            raise StockAPIError(f"Failed to fetch stock data: {str(e)}") from e
+        if self.request_counter:
+            self.request_counter.increment_api()
 
-    @staticmethod
-    def get_news(ticker: str, days_back: int = 3, num_articles: int = 3) -> List[Dict]:
+        for attempt in range(retries):
+            try:
+                params = {
+                    'symbol': ticker,
+                    'token': FINNHUB_API_KEY
+                }
+                response = requests.get(f"{FINNHUB_API_URL}/quote", params=params, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if not data:
+                    raise StockAPIError(f"No data found for ticker: {ticker}")
+                cache.set(cache_key, data)
+                return data
+            except requests.exceptions.RequestException as e:
+                if hasattr(e.response, 'status_code') and e.response.status_code == 429:
+                    wait_time = backoff_factor * (2 ** attempt)
+                    print(f"Rate limit hit! Waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    raise StockAPIError(f"Failed to fetch stock data: {str(e)}") from e
+
+        raise StockAPIError("Exceeded maximum retries for fetching stock data")
+
+    def get_news(self, ticker: str, days_back: int = 3, num_articles: int = 3, retries: int = 3, backoff_factor: float = 0.3) -> List[Dict]:
+        if self.request_counter:
+            self.request_counter.increment('news_api')
         """
-        Fetch news articles related to the stock with caching
+        Fetch news articles related to the stock with caching and retry mechanism
         """
         cache_key = f"news_{ticker}_{days_back}_{num_articles}"
         cached_data = cache.get(cache_key)
         if cached_data:
             return cached_data
 
-        try:
-            params = {
-                'q': ticker,
-                'from': (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d'),
-                'sortBy': 'relevancy',
-                'language': 'en',
-                'apiKey': NEWS_API_KEY,
-                'pageSize': num_articles
-            }
-            
-            response = requests.get(NEWS_API_URL, params=params, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            if data['status'] != 'ok':
-                raise StockAPIError(f"News API error: {data.get('message', 'Unknown error')}")
-            
-            articles = data.get('articles', [])
-            cache.set(cache_key, articles)
-            return articles
-            
-        except requests.exceptions.RequestException as e:
-            raise StockAPIError(f"News request failed: {str(e)}") from e
-        except Exception as e:
-            raise StockAPIError(f"News processing error: {str(e)}") from e
+        for attempt in range(retries):
+            try:
+                params = {
+                    'q': ticker,
+                    'from': (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d'),
+                    'sortBy': 'relevancy',
+                    'language': 'en',
+                    'apiKey': NEWS_API_KEY,
+                    'pageSize': num_articles
+                }
+                
+                response = requests.get(NEWS_API_URL, params=params, timeout=10)
+                response.raise_for_status()
+                
+                data = response.json()
+                if data['status'] != 'ok':
+                    raise StockAPIError(f"News API error: {data.get('message', 'Unknown error')}")
+                
+                articles = data.get('articles', [])
+                cache.set(cache_key, articles)
+                return articles
+            except requests.exceptions.RequestException as e:
+                if response.status_code == 429:  # Too Many Requests
+                    wait_time = backoff_factor * (2 ** attempt)
+                    print(f"Error 429 again... Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    raise StockAPIError(f"News request failed: {str(e)}") from e
+            except Exception as e:
+                raise StockAPIError(f"News processing error: {str(e)}") from e
+
+        raise StockAPIError("Exceeded maximum retries for fetching news")
 
     @staticmethod
     def get_recommendations(
@@ -97,26 +123,34 @@ class StockAPI:
             raise StockAPIError(f"Technical analysis failed: {str(e)}") from e
 
 class AIClient:
-    def __init__(self, model=OLLAMA_MODEL):
+    def __init__(self, model=OLLAMA_MODEL, request_counter=None):
         self.default_model = model
+        self.request_counter = request_counter
         self._ensure_model_available(model)
 
-    def _ensure_model_available(self, model_name):
-        """Ensure the model is pulled and available"""
+    def _ensure_model_available(self, model_name: str) -> None:
+        """
+        Ensure the model is available locally, pull if not.
+        
+        Args:
+            model_name (str): Name of the Ollama model to check/pull
+        """
         try:
-            # Try to get model info - this will fail if model isn't pulled
-            ollama.show(model_name)
+            # Try to get model info
+            ollama.list()
         except Exception as e:
-            if "not found" in str(e):
-                print(f"Model {model_name} not found. Pulling now...")
-                try:
-                    ollama.pull(model_name)
-                    print(f"Successfully pulled model {model_name}")
-                except Exception as pull_error:
-                    print(f"Error pulling model: {pull_error}")
-                    raise
+            print(f"Error checking model {model_name}: {e}")
+            try:
+                print(f"Pulling model {model_name}...")
+                ollama.pull(model_name)
+                print(f"Successfully pulled model {model_name}")
+            except Exception as pull_error:
+                print(f"Error pulling model: {pull_error}")
+                raise
 
     def analyze(self, prompt, role, model=None):
+        if self.request_counter:
+            self.request_counter.increment('ai_api')
         """Analyzes the given prompt using the specified AI model."""
         try:
             model_to_use = model or self.default_model

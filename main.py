@@ -4,7 +4,7 @@ import os
 import re
 import time  # Add this import
 from datetime import datetime, timedelta
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings  # Added QSettings here
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QPropertyAnimation, QEasingCurve  # Added QSettings, QPropertyAnimation, and QEasingCurve here
 from PySide6.QtGui import QFont, QColor, QPixmap, QIcon, QTextCursor  # Added QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,10 +26,12 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QSizePolicy,
     QSystemTrayIcon,
-    QComboBox  # Added QComboBox
+    QComboBox,  # Added QComboBox
+    QProgressBar  # Add QProgressBar
 )
 import pyqtgraph as pg
 import numpy as np  # Import numpy
+from request_counter import RequestCounter
 
 # Check numpy version
 try:
@@ -58,7 +60,6 @@ class ModernStockApp(QMainWindow):
         
         # Initialize settings first
         self.settings = QSettings("Stoxalotl", "Preferences")
-        self.favorite_tickers = self.settings.value("Watchlist", []) or []
         
         # Get current theme from settings or use default
         self.current_theme = self.settings.value("Theme", "Dark")
@@ -82,9 +83,12 @@ class ModernStockApp(QMainWindow):
         self.recent_tickers = []  # Add list for recently viewed tickers
         self.max_recent_tickers = 5  # Maximum number of recent tickers to show
 
-        # Initialize API clients
-        self.stock_api = StockAPI()
-        self.ai_client = AIClient()
+        # Initialize request counter
+        self.request_counter = RequestCounter()
+        
+        # Initialize API clients with counter
+        self.stock_api = StockAPI(request_counter=self.request_counter)
+        self.ai_client = AIClient(request_counter=self.request_counter)
 
         # Initialize chat box
         self.chat_box = QTextEdit()
@@ -94,8 +98,33 @@ class ModernStockApp(QMainWindow):
         # Setup UI and timer
         self._setup_ui()
         self._setup_styles()
+        self._setup_status_bar()
         self._connect_signals()
         self._init_update_timer()
+
+        # Initialize debounce timer
+        self.debounce_timer = QTimer(self)
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.timeout.connect(self._analyze)
+
+        # Initialize loading circle
+        self.loading_circle = QProgressBar(self)
+        self.loading_circle.setRange(0, 100)
+        self.loading_circle.setValue(0)
+        self.loading_circle.setTextVisible(False)
+        self.loading_circle.setFixedSize(100, 100)
+        self.loading_circle.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #00bcd4;
+                border-radius: 50px;
+                background-color: #1a1a1a;
+            }
+            QProgressBar::chunk {
+                background-color: #00bcd4;
+                border-radius: 50px;
+            }
+        """)
+        self.loading_circle.hide()
 
     def _init_update_timer(self):
         self.update_timer = QTimer(self)
@@ -185,6 +214,7 @@ class ModernStockApp(QMainWindow):
                 border-color: #00bcd4;
             }
         """)
+        self.search.textChanged.connect(self._on_search_text_changed)  # Connect to debounce method
 
         # Analyze button
         self.btn_analyze = QPushButton("Analyze")
@@ -203,6 +233,7 @@ class ModernStockApp(QMainWindow):
                 background-color: #006064;
             }
         """)
+        self.btn_analyze.clicked.connect(self._analyze)  # Connect directly to analyze method
 
         # Home button
         self.btn_home = QPushButton("Return Home")
@@ -221,6 +252,7 @@ class ModernStockApp(QMainWindow):
                 color: white;
             }
         """)
+        self.btn_home.clicked.connect(self._return_home)
 
         # Add widgets to layouts
         search_layout.addWidget(self.search)
@@ -234,6 +266,10 @@ class ModernStockApp(QMainWindow):
         header_layout.addWidget(self.btn_home)
 
         parent_layout.addWidget(header)
+
+    def _on_search_text_changed(self):
+        """Debounce method for search input"""
+        self.debounce_timer.start(500)  # Wait for 500ms before triggering the analyze method
 
     def _create_home_page(self):
         home_page = QWidget()
@@ -252,20 +288,6 @@ class ModernStockApp(QMainWindow):
         self.news_feed.setReadOnly(True)
         self.news_feed.setMaximumHeight(200)
         layout.addWidget(self.news_feed)
-
-        # Favorite Stocks Section
-        favorites_label = QLabel("Favorite Stocks")
-        favorites_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        layout.addWidget(favorites_label)
-
-        self.favorites_scroll = QScrollArea()
-        self.favorites_scroll.setWidgetResizable(True)
-        self.favorites_content = QWidget()
-        self.favorites_layout = QHBoxLayout(self.favorites_content)
-        self.favorites_layout.setSpacing(10)
-        self.favorites_scroll.setWidget(self.favorites_content)
-        self.favorites_scroll.setMaximumHeight(150)
-        layout.addWidget(self.favorites_scroll)
 
         # Recently Viewed Section
         recent_label = QLabel("Recently Viewed")
@@ -292,7 +314,7 @@ class ModernStockApp(QMainWindow):
         
         # Initial data load
         self._load_news_feed()
-        self._load_favorites(["AAPL", "MSFT", "GOOGL"])
+        self._load_recent_tickers()
         self._load_market_analysis()
 
         self.stacked_widget.addWidget(home_page)
@@ -321,7 +343,7 @@ class ModernStockApp(QMainWindow):
     def _load_news_feed(self):
         # Fetch news articles related to market and favorite stocks
         try:
-            tickers = ["market"] + self.favorite_tickers  # Include general market news
+            tickers = ["market"]  # Include general market news
             all_news = []
             for ticker in tickers:
                 try:
@@ -510,37 +532,6 @@ class ModernStockApp(QMainWindow):
         except Exception as e:
             print(f"Error creating stock card for {ticker}: {e}")
 
-    def _load_favorites(self, tickers=None):
-        # Clear existing widgets
-        for i in reversed(range(self.favorites_layout.count())):
-            widget = self.favorites_layout.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
-
-        if tickers is None:
-            tickers = self.favorite_tickers
-
-        for ticker in tickers:
-            try:
-                stock_data = self.stock_api.get_stock(ticker)
-                time_series = stock_data.get('Time Series (Daily)', {})
-                if not time_series:
-                    print(f"Error: No data received from Alpha Vantage for {ticker}")
-                    continue
-
-                # Get the latest data
-                latest_date = max(time_series.keys())
-                latest_data = time_series[latest_date]
-                current_price = float(latest_data['4. close'])
-                prev_close = float(latest_data['1. open'])
-
-                self._create_stock_card(ticker, current_price, prev_close, self.favorites_layout)
-            except StockAPIError as e:
-                print(f"Error loading favorite stock {ticker}: {e}")
-            except Exception as e:
-                print(f"Error loading favorite stock {ticker}: {e}")
-            time.sleep(1)  # Add delay between requests
-
     def _load_recent_tickers(self):
         # Clear existing widgets
         for i in reversed(range(self.recent_layout.count())):
@@ -551,16 +542,8 @@ class ModernStockApp(QMainWindow):
         for ticker in self.recent_tickers:
             try:
                 stock_data = self.stock_api.get_stock(ticker)
-                time_series = stock_data.get('Time Series (Daily)', {})
-                if not time_series:
-                    print(f"Error: No data received from Alpha Vantage for {ticker}")
-                    continue
-
-                # Get the latest data
-                latest_date = max(time_series.keys())
-                latest_data = time_series[latest_date]
-                current_price = float(latest_data['4. close'])
-                prev_close = float(latest_data['1. open'])
+                current_price = stock_data['c']
+                prev_close = stock_data['pc']
 
                 self._create_stock_card(ticker, current_price, prev_close, self.recent_layout)
             except StockAPIError as e:
@@ -632,7 +615,7 @@ class ModernStockApp(QMainWindow):
             self.current_ticker = ticker
             
             # Update recent tickers list
-            if ticker in self.recent_tickers:
+            if (ticker in self.recent_tickers):
                 self.recent_tickers.remove(ticker)
             self.recent_tickers.insert(0, ticker)
             self.recent_tickers = self.recent_tickers[:self.max_recent_tickers]
@@ -663,32 +646,19 @@ class ModernStockApp(QMainWindow):
 
         try:
             stock_data = self.stock_api.get_stock(self.current_ticker)
-            time_series = stock_data.get('Time Series (Daily)', {})
-            if not time_series:
-                print(f"Error: No data received from Alpha Vantage for {self.current_ticker}")
-                self.overview.ticker.setText(self.current_ticker)
-                self.overview.price.setText("N/A")
-                self.metrics.update_metrics({})
-                return
-
-            # Get the latest data
-            latest_date = max(time_series.keys())
-            latest_data = time_series[latest_date]
-            current_price = float(latest_data['4. close'])
-            prev_close = float(latest_data['1. open'])
+            current_price = stock_data['c']
+            prev_close = stock_data['pc']
 
             # Calculate price change
             change_amount = current_price - prev_close
-            change_percent = (change_amount / prev_close) * 100
+            change_percent = (change_amount / prev_close) * 100 if prev_close != 0 else 0
             change_text = f"{change_amount:+.2f} ({change_percent:+.2f}%)"
 
             # Update overview with all information including favorite status
-            is_favorite = self.current_ticker in self.favorite_tickers
             self.overview.update_overview(
                 self.current_ticker,
                 current_price,
-                change_text,
-                is_favorite=is_favorite
+                change_text
             )
 
             # Update metrics
@@ -702,20 +672,11 @@ class ModernStockApp(QMainWindow):
 
     def _get_stock_metrics(self, stock_data):
         metrics = {}
-        time_series = stock_data.get('Time Series (Daily)', {})
-        if not time_series:
-            print("Error: No stock info available")
-            return metrics
-
-        # Get the latest data
-        latest_date = max(time_series.keys())
-        latest_data = time_series[latest_date]
-
         # Ensure values are float64 and handle missing keys
-        metrics['pe_ratio'] = np.float64(latest_data.get('trailingPE', 0) or 0)
-        metrics['dividend_yield'] = np.float64(latest_data.get('dividendYield', 0) or 0)
-        metrics['market_cap'] = np.float64(latest_data.get('marketCap', 0) or 0)
-        metrics['volume'] = np.float64(latest_data.get('volume', 0) or 0)
+        metrics['pe_ratio'] = np.float64(stock_data.get('pe_ratio', 0) or 0)
+        metrics['dividend_yield'] = np.float64(stock_data.get('dividend_yield', 0) or 0)
+        metrics['market_cap'] = np.float64(stock_data.get('market_cap', 0) or 0)
+        metrics['volume'] = np.float64(stock_data.get('volume', 0) or 0)
         return metrics
 
     def _update_news(self, ticker):
@@ -770,13 +731,7 @@ class ModernStockApp(QMainWindow):
         self.ai_recommendation.update_recommendations(recs)
 
     def _create_long_term_prompt(self, stock_data, investment_amount, investment_timeframe):
-        time_series = stock_data.get('Time Series (Daily)', {})
-        if not time_series:
-            return "Error: No data received from Alpha Vantage"
-
-        latest_date = max(time_series.keys())
-        latest_data = time_series[latest_date]
-        current_price = float(latest_data['4. close'])
+        current_price = stock_data['c']
 
         prompt = f"""
         Analyze the long-term investment potential of {self.current_ticker}.
@@ -788,13 +743,7 @@ class ModernStockApp(QMainWindow):
         return prompt
 
     def _create_day_trade_prompt(self, stock_data, investment_amount, investment_timeframe):
-        time_series = stock_data.get('Time Series (Daily)', {})
-        if not time_series:
-            return "Error: No data received from Alpha Vantage"
-
-        latest_date = max(time_series.keys())
-        latest_data = time_series[latest_date]
-        current_price = float(latest_data['4. close'])
+        current_price = stock_data['c']
 
         prompt = f"""
         Provide a day trading analysis for {self.current_ticker}.
@@ -806,13 +755,7 @@ class ModernStockApp(QMainWindow):
         return prompt
 
     def _create_strategy_prompt(self, stock_data, investment_amount, investment_timeframe):
-        time_series = stock_data.get('Time Series (Daily)', {})
-        if not time_series:
-            return "Error: No data received from Alpha Vantage"
-
-        latest_date = max(time_series.keys())
-        latest_data = time_series[latest_date]
-        current_price = float(latest_data['4. close'])
+        current_price = stock_data['c']
 
         prompt = f"""
         Create a clear, step-by-step investment strategy for {self.current_ticker}.
@@ -837,7 +780,6 @@ class ModernStockApp(QMainWindow):
         self.search.returnPressed.connect(self._analyze)
         self.btn_analyze.clicked.connect(self._analyze)
         self.btn_home.clicked.connect(self._return_home)
-        self.overview.watchlist_btn.clicked.connect(self._add_to_favorites)  # Connect star button instead
 
         # Connect card maximize signals
         self.news_card.maximize_signal.connect(self._show_maximized_card)
@@ -851,36 +793,6 @@ class ModernStockApp(QMainWindow):
         self.stacked_widget.setCurrentIndex(0)
         self.btn_home.hide()
         self.update_timer.stop()
-
-    def _add_to_favorites(self):
-        """Toggle favorite status of current ticker"""
-        if not self.current_ticker:
-            return
-            
-        if self.current_ticker in self.favorite_tickers:
-            # Remove from favorites
-            self.favorite_tickers.remove(self.current_ticker)
-            self.overview.update_overview(
-                self.current_ticker, 
-                float(self.overview.price.text().replace('$', '')),
-                self.overview.change.text(),
-                is_favorite=False
-            )
-        else:
-            # Add to favorites
-            self.favorite_tickers.append(self.current_ticker)
-            self.overview.update_overview(
-                self.current_ticker, 
-                float(self.overview.price.text().replace('$', '')),
-                self.overview.change.text(),
-                is_favorite=True
-            )
-            
-        # Update favorites display
-        self._load_favorites()
-        
-        # Save favorites to settings
-        self.settings.setValue("Watchlist", self.favorite_tickers)
 
     def _show_maximized_card(self, card_data):
         """
@@ -973,17 +885,10 @@ class ModernStockApp(QMainWindow):
 
         try:
             stock_data = self.stock_api.get_stock(self.current_ticker)
-            time_series = stock_data.get('Time Series (Daily)', {})
-            if not time_series:
-                return f"Error: No data received from Alpha Vantage for {self.current_ticker}"
-
-            # Get the latest data
-            latest_date = max(time_series.keys())
-            latest_data = time_series[latest_date]
-            current_price = float(latest_data['4. close'])
-            market_cap = float(latest_data.get('marketCap', 0))
-            pe_ratio = float(latest_data.get('trailingPE', 0))
-            dividend_yield = float(latest_data.get('dividendYield', 0))
+            current_price = stock_data['c']
+            market_cap = stock_data.get('marketCap', 0)
+            pe_ratio = stock_data.get('trailingPE', 0)
+            dividend_yield = stock_data.get('dividendYield', 0)
 
             context_parts = [
                 f"Stock: {self.current_ticker}",
@@ -1013,7 +918,63 @@ class ModernStockApp(QMainWindow):
         except Exception as e:
             return f"Error retrieving context: {str(e)}"
 
-    # ...rest of the class remains unchanged...
+    def _setup_status_bar(self):
+        self.statusBar().showMessage('')
+        
+        # Create labels for different types of requests
+        self.api_requests_label = QLabel("API Calls: 0")
+        self.cache_requests_label = QLabel("Cached: 0")
+        self.total_requests_label = QLabel("Total: 0")
+        
+        # Style the labels
+        for label in [self.api_requests_label, self.cache_requests_label, self.total_requests_label]:
+            label.setStyleSheet("""
+                QLabel {
+                    padding: 5px;
+                    font-weight: bold;
+                    margin-right: 10px;
+                }
+            """)
+        
+        # Set specific colors
+        self.api_requests_label.setStyleSheet(self.api_requests_label.styleSheet() + "color: #ff4444;")  # Red for API calls
+        self.cache_requests_label.setStyleSheet(self.cache_requests_label.styleSheet() + "color: #00C851;")  # Green for cache
+        self.total_requests_label.setStyleSheet(self.total_requests_label.styleSheet() + "color: #00bcd4;")  # Blue for total
+        
+        # Add labels to status bar
+        self.statusBar().addPermanentWidget(self.api_requests_label)
+        self.statusBar().addPermanentWidget(self.cache_requests_label)
+        self.statusBar().addPermanentWidget(self.total_requests_label)
+
+        # Add rate limit warning label
+        self.rate_limit_label = QLabel("Rate Limit: 30/sec")
+        self.rate_limit_label.setStyleSheet("color: #FF8800; font-weight: bold; padding: 5px;")
+        self.statusBar().addPermanentWidget(self.rate_limit_label)
+
+        # Update request counts every second
+        self.request_timer = QTimer(self)
+        self.request_timer.timeout.connect(self._update_request_count)
+        self.request_timer.start(1000)  # Update every second
+
+    def _update_request_count(self):
+        counts = self.request_counter.get_counts()
+        time_since_reset = self.request_counter.time_since_reset()
+        
+        self.api_requests_label.setText(f"API Calls: {counts['api']}")
+        self.cache_requests_label.setText(f"Cached: {counts['cache']}")
+        self.total_requests_label.setText(
+            f"Total: {counts['total']} | Reset: {time_since_reset.seconds}s ago"
+        )
+        
+        # Update rate limit warning color based on API call count
+        if counts['api'] > 25:  # Warning when close to limit
+            self.rate_limit_label.setStyleSheet("color: #ff4444; font-weight: bold; padding: 5px;")
+        else:
+            self.rate_limit_label.setStyleSheet("color: #FF8800; font-weight: bold; padding: 5px;")
+
+    def closeEvent(self, event):
+        self.request_timer.stop()
+        # ...existing code...
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
