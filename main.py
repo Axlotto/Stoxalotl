@@ -47,7 +47,10 @@ from widgets import KeyMetrics, RecommendationWidget,  AnalysisCard, StockChart,
 from api_client import StockAPI, AIClient, StockAPIError, AIClientError  # Specify the full path and import StockAPIError and AIClientError
 from helpers import parse_recommendations, analysis_color, remove_think_tags  # Specify the full path
 from widgets import StockOverview
+from cache import Cache
 
+# Initialize cache with a TTL of 5 minutes
+cache = Cache(ttl=300)
 
 class ModernStockApp(QMainWindow):
     def __init__(self):
@@ -168,7 +171,7 @@ class ModernStockApp(QMainWindow):
         # Search bar
         self.search = QLineEdit()
         self.search.setPlaceholderText("Enter ticker...")
-        self.search.setFixedWidth(120)
+        self.search.setFixedWidth(150)
         self.search.setFixedHeight(32)  # Match button height
         self.search.setStyleSheet("""
             QLineEdit {
@@ -185,7 +188,7 @@ class ModernStockApp(QMainWindow):
 
         # Analyze button
         self.btn_analyze = QPushButton("Analyze")
-        self.btn_analyze.setFixedSize(70, 32)  # Match search bar height
+        self.btn_analyze.setFixedSize(90, 32)  # Match search bar height
         self.btn_analyze.setStyleSheet("""
             QPushButton {
                 background-color: #00bcd4;

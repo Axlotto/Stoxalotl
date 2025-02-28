@@ -6,26 +6,43 @@ from datetime import datetime, timedelta
 from tradingview_ta import TA_Handler, Interval
 from typing import Dict, List, Optional, Union
 from config import NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
+from cache import Cache
+
+# Initialize cache with a TTL of 5 minutes
+cache = Cache(ttl=300)
+
 class StockAPI:
     @staticmethod
     def get_stock(ticker: str) -> yf.Ticker:
         """
-        Fetch stock data using yfinance
+        Fetch stock data using yfinance with caching
         """
+        cache_key = f"stock_{ticker}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
         try:
             stock = yf.Ticker(ticker)
             # Fetch live data to ensure the ticker is valid and data is available
             stock_info = stock.info
             if not stock_info:
                 raise StockAPIError(f"No data found for ticker: {ticker}")
+            cache.set(cache_key, stock)
             return stock
         except Exception as e:
             raise StockAPIError(f"Failed to fetch stock data: {str(e)}") from e
+
     @staticmethod
     def get_news(ticker: str, days_back: int = 3, num_articles: int = 3) -> List[Dict]:
         """
-        Fetch news articles related to the stock
+        Fetch news articles related to the stock with caching
         """
+        cache_key = f"news_{ticker}_{days_back}_{num_articles}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
         try:
             params = {
                 'q': ticker,
@@ -43,12 +60,15 @@ class StockAPI:
             if data['status'] != 'ok':
                 raise StockAPIError(f"News API error: {data.get('message', 'Unknown error')}")
             
-            return data.get('articles', [])
+            articles = data.get('articles', [])
+            cache.set(cache_key, articles)
+            return articles
             
         except requests.exceptions.RequestException as e:
             raise StockAPIError(f"News request failed: {str(e)}") from e
         except Exception as e:
             raise StockAPIError(f"News processing error: {str(e)}") from e
+
     @staticmethod
     def get_recommendations(
         ticker: str,
@@ -75,10 +95,12 @@ class StockAPI:
             }
         except Exception as e:
             raise StockAPIError(f"Technical analysis failed: {str(e)}") from e
+
 class AIClient:
     def __init__(self, model=OLLAMA_MODEL):
         self.default_model = model
         self._ensure_model_available(model)
+
     def _ensure_model_available(self, model_name):
         """Ensure the model is pulled and available"""
         try:
@@ -93,6 +115,7 @@ class AIClient:
                 except Exception as pull_error:
                     print(f"Error pulling model: {pull_error}")
                     raise
+
     def analyze(self, prompt, role, model=None):
         """Analyzes the given prompt using the specified AI model."""
         try:
@@ -116,6 +139,7 @@ class AIClient:
         except Exception as e:
             print(f"Error during AI analysis: {e}")
             return {'message': {'content': f"Analysis failed: {str(e)}"}}
+
     @staticmethod
     def generate_analysis(
         prompt: str,
@@ -131,6 +155,7 @@ class AIClient:
             {"role": "user", "content": prompt}
         ]
         return AIClient._chat_with_retry(messages, model, max_retries)
+
     @staticmethod
     def generate_chat_response(
         messages: List[Dict],
@@ -141,6 +166,7 @@ class AIClient:
         Generate conversational AI response
         """
         return AIClient._chat_with_retry(messages, model, max_retries)
+
     @staticmethod
     def _chat_with_retry(
         messages: List[Dict],
@@ -159,9 +185,11 @@ class AIClient:
                     raise AIClientError(f"AI request failed after {max_retries} attempts: {str(e)}") from e
                 continue
         raise AIClientError("Unexpected error in AI communication")
+
 class StockAPIError(Exception):
     """Custom exception for Stock API errors"""
     pass
+
 class AIClientError(Exception):
     """Custom exception for AI client errors"""
     pass
