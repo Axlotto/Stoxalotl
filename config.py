@@ -86,10 +86,15 @@ CHART_CONFIG = {
 
 # UI Element Customization
 UI_CONFIG = {
-    "border_radius": 8,            # Rounded corners for widgets
-    "padding": 12,                 # Spacing within widgets
-    "animation_speed": 250,        # Animation speed in ms
-    "button_style": "modern"       # Button style (e.g., "modern", "classic")
+    "border_radius": 10,            # Rounded corners for widgets
+    "padding": 14,                 # Spacing within widgets
+    "animation_speed": 300,        # Animation speed in ms
+    "button_style": "elevated",     # Button style (e.g., "modern", "classic")
+    "accent_color": "#29b6f6",      # A vibrant accent color
+    "font_color": "#e0e0e0",        # Readable font color
+    "hover_brightness": 1.1,        # Brightness increase on hover
+    "shadow_depth": 3,              # Depth of shadows
+    "transition_duration": 0.2      # Transition duration in seconds
 }
 
 # Technical Analysis Settings
@@ -102,5 +107,6 @@ TA_CONFIG = {
 # Application Defaults
 DEFAULTS = {
     "investment_amount": 10000,    # Default investment amount
-    "timeframe": 30                # Default investment days
+    "timeframe": 30,                # Default investment days
+    "profit_target": 0.10           # Default profit target (10%)
 }

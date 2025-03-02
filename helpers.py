@@ -113,3 +113,18 @@ def get_change_color(current, previous, theme="Dark"):
         return colors['positive'] if float(current) >= float(previous) else colors['negative']
     except (ValueError, TypeError):
         return colors['text']
+
+def format_percentage(value):
+    """
+    Format numeric value as percentage string.
+    
+    Args:
+        value (float): Numeric percentage value
+        
+    Returns:
+        str: Formatted percentage string (XX.XX%)
+    """
+    try:
+        return f"{float(value) * 100:.2f}%"
+    except (ValueError, TypeError):
+        return "N/A"

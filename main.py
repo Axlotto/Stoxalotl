@@ -3,6 +3,7 @@ import sys
 import os
 import re
 import time  # Add this import
+import logging  # Add logging import
 from datetime import datetime, timedelta
 from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QPropertyAnimation, QEasingCurve  # Added QSettings, QPropertyAnimation, and QEasingCurve here
 from PySide6.QtGui import QFont, QColor, QPixmap, QIcon, QTextCursor  # Added QTextCursor
@@ -31,6 +32,8 @@ from PySide6.QtWidgets import (
 )
 import pyqtgraph as pg
 import numpy as np  # Import numpy
+import pyqtgraph as pg
+import numpy as np  # Import numpy
 from request_counter import RequestCounter
 
 # Check numpy version
@@ -50,9 +53,13 @@ from api_client import StockAPI, AIClient, StockAPIError, AIClientError  # Speci
 from helpers import parse_recommendations, analysis_color, remove_think_tags  # Specify the full path
 from widgets import StockOverview
 from cache import Cache
+from widgets import ProfitTarget
 
 # Initialize cache with a TTL of 5 minutes
 cache = Cache(ttl=300)
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class ModernStockApp(QMainWindow):
     def __init__(self):
@@ -87,8 +94,8 @@ class ModernStockApp(QMainWindow):
         self.request_counter = RequestCounter()
         
         # Initialize API clients with counter
-        self.stock_api = StockAPI(request_counter=self.request_counter)
-        self.ai_client = AIClient(request_counter=self.request_counter)
+        self.stock_api = StockAPI(request_counter=self.request_counter, max_requests_per_second=30)
+        self.ai_client = AIClient()
 
         # Initialize chat box
         self.chat_box = QTextEdit()
@@ -150,15 +157,30 @@ class ModernStockApp(QMainWindow):
         border_radius = UI_CONFIG["border_radius"]
         padding = UI_CONFIG["padding"]
         button_style = UI_CONFIG["button_style"]
+        accent_color = UI_CONFIG["accent_color"]
+        font_color = UI_CONFIG["font_color"]
+        hover_brightness = UI_CONFIG["hover_brightness"]
+        shadow_depth = UI_CONFIG["shadow_depth"]
+        transition_duration = UI_CONFIG["transition_duration"]
 
         # Example: Style QPushButton based on the configuration
-        if button_style == "modern":
+        if button_style == "elevated":
             self.setStyleSheet(self.styleSheet() + f"""
                 QPushButton {{
                     background-color: {theme['primary']};
-                    color: {theme['text']};
+                    color: {font_color};
                     border-radius: {border_radius}px;
                     padding: {padding // 2}px {padding}px;
+                    box-shadow: 0 {shadow_depth // 2}px {shadow_depth}px rgba(0, 0, 0, 0.3);
+                    transition: background-color {transition_duration}s, transform {transition_duration}s;
+                }}
+                QPushButton:hover {{
+                    background-color: {accent_color};
+                    transform: scale({hover_brightness});
+                }}
+                QPushButton:pressed {{
+                    background-color: {theme['secondary']};
+                    transform: scale(1.0);
                 }}
             """)
 
@@ -353,11 +375,11 @@ class ModernStockApp(QMainWindow):
                             if isinstance(article, dict) and 'title' in article and 'description' in article:
                                 all_news.append(article)
                             else:
-                                print(f"Invalid article format for {ticker}: {article}")
+                                logging.warning(f"Invalid article format for {ticker}: {article}")
                     else:
-                        print(f"Unexpected news format for {ticker}: {type(news)}")
+                        logging.warning(f"Unexpected news format for {ticker}: {type(news)}")
                 except StockAPIError as e:
-                    print(f"Error fetching news for {ticker}: {e}")
+                    logging.error(f"Error fetching news for {ticker}: {e}")
                     continue
 
             news_text = "\n\n".join(
@@ -382,6 +404,7 @@ class ModernStockApp(QMainWindow):
         self.overview = StockOverview()
         self.metrics = KeyMetrics()
         self.ai_recommendation = RecommendationWidget()
+        self.profit_target = ProfitTarget()  # Add profit target widget
 
         # Add chat section
         chat_container = QWidget()
@@ -410,7 +433,7 @@ class ModernStockApp(QMainWindow):
         chat_layout.addLayout(input_container)
 
         # Add widgets to sidebar (removed btn_add_favorite)
-        for widget in [self.overview, self.metrics, self.ai_recommendation, chat_container]:
+        for widget in [self.overview, self.metrics, self.ai_recommendation, self.profit_target, chat_container]:
             sidebar_layout.addWidget(widget)
 
         # Right side tabs
@@ -627,7 +650,7 @@ class ModernStockApp(QMainWindow):
             self._update_ui()
             self._update_news(ticker)
             if stock:
-                self._generate_analysis(stock, investment_amount=10000, investment_timeframe=30)
+                self._generate_combined_analysis(stock)
                 self._update_chart()
             self.chart.update_chart(ticker)
 
@@ -636,8 +659,10 @@ class ModernStockApp(QMainWindow):
             self.update_timer.start()
 
         except StockAPIError as e:
+            logging.error(f"Error analyzing stock: {e}")
             self._show_error(str(e))
         except Exception as e:
+            logging.error(f"Unexpected error during analysis: {e}")
             self._show_error(f"An unexpected error occurred: {str(e)}")
 
     def _update_ui(self):
@@ -664,10 +689,15 @@ class ModernStockApp(QMainWindow):
             # Update metrics
             metrics = self._get_stock_metrics(stock_data)
             self.metrics.update_metrics(metrics)
+            
+            # Update profit target
+            self.profit_target.update_profit_target(current_price)
 
         except StockAPIError as e:
+            logging.error(f"Error updating UI: {e}")
             self._show_error(str(e))
         except Exception as e:
+            logging.error(f"Unexpected error during UI update: {e}")
             self._show_error(f"An unexpected error occurred: {str(e)}")
 
     def _get_stock_metrics(self, stock_data):
@@ -689,41 +719,87 @@ class ModernStockApp(QMainWindow):
                     description = article.get('description', 'No Description')
                     news_text += f"{title}\n{description}\n\n"
                 except Exception as e:
+                    logging.warning(f"Error processing article {i}: {e}")
                     news_text += f"Error processing article {i}: {str(e)}\n\n"
             self.news_card.content.setPlainText(news_text)
         except Exception as e:
+            logging.error(f"Error updating news: {e}")
             self.news_card.content.setPlainText(f"News error: {str(e)}")
 
-    def _generate_analysis(self, stock, investment_amount, investment_timeframe):
-        # Generate analysis using AI client
+    def _generate_combined_analysis(self, stock):
         try:
-            # Long-term analysis
-            lt_prompt = self._create_long_term_prompt(stock, investment_amount, investment_timeframe)
-            lt_response = self.ai_client.analyze(lt_prompt, "financial analyst")
-            lt_content = lt_response['message']['content']
-            lt_content = remove_think_tags(lt_content)  # Remove <think> tags
-            self.long_term_card.content.setPlainText(lt_content)
+            self.long_term_card.content.setPlainText("Loading analysis...")
+            self.day_trade_card.content.setPlainText("Loading analysis...")
+            self.strategy_card.content.setPlainText("Loading analysis...")
+            
+            # Show loading indicators
+            QApplication.processEvents()
+            
+            # Combined prompt for multiple roles
+            combined_prompt = f"""
+            Analyze the long-term investment potential of {self.current_ticker}:
+            - Current stock price: ${stock['c']}
+            - Investment amount: $10000
+            - Investment timeframe: 30 days
 
-            # Day-trade analysis 
-            dt_prompt = self._create_day_trade_prompt(stock, investment_amount, investment_timeframe)
-            dt_response = self.ai_client.analyze(dt_prompt, "day trading expert")
-            dt_content = dt_response['message']['content']
-            dt_content = remove_think_tags(dt_content)  # Remove <think> tags
-            self.day_trade_card.content.setPlainText(dt_content)
+            Provide a detailed analysis covering potential growth factors, risks, and a final investment recommendation.
+            Also, provide a buy, hold, and sell suggestion.
 
-            # Generate investment strategy
-            strategy_prompt = self._create_strategy_prompt(stock, investment_amount, investment_timeframe)
-            strategy_response = self.ai_client.analyze(strategy_prompt, "investment strategist")
-            strategy_content = strategy_response['message']['content']
-            strategy_content = remove_think_tags(strategy_content)
-            self.strategy_card.content.setPlainText(strategy_content)
+            Then, provide a day trading analysis:
+            Focus on potential entry and exit points, technical indicators, and risk management strategies.
 
-            # Update recommendations
-            self._update_recommendations(lt_response['message']['content'])
+            Finally, create a step-by-step investment strategy including:
+            1. Entry price point
+            2. How long to hold
+            3. Target price
+            4. When to reinvest
+            5. Stop loss recommendation
+            """
+
+            response = self.ai_client.analyze(
+                combined_prompt, 
+                "financial analyst", 
+                model=OLLAMA_MODEL, 
+                retries=3, 
+                backoff_factor=2.0
+            )
+            
+            content = response['message']['content']
+            cleaned_content = remove_think_tags(content)
+
+            # Split the analysis based on headers or sections
+            try:
+                # Try to split by common headers
+                parts = re.split(r'\n\s*(?:Day Trading Analysis|Investment Strategy|Step-by-step Investment Strategy):', cleaned_content)
+                
+                if len(parts) >= 3:
+                    self.long_term_card.content.setPlainText(parts[0].strip())
+                    self.day_trade_card.content.setPlainText(parts[1].strip())
+                    self.strategy_card.content.setPlainText(parts[2].strip())
+                else:
+                    # Fallback to simpler splitting if no headers found
+                    sections = cleaned_content.split("\n\n")
+                    third = len(sections) // 3
+                    
+                    self.long_term_card.content.setPlainText("\n\n".join(sections[:third]))
+                    self.day_trade_card.content.setPlainText("\n\n".join(sections[third:2*third]))
+                    self.strategy_card.content.setPlainText("\n\n".join(sections[2*third:]))
+                
+                # Update recommendations
+                self._update_recommendations(parts[0] if len(parts) >= 3 else "\n\n".join(sections[:third]))
+            
+            except Exception as e:
+                logging.error(f"Error splitting analysis content: {e}")
+                # Fallback - just show everything in the long term card
+                self.long_term_card.content.setPlainText(cleaned_content)
+                self.day_trade_card.content.setPlainText("Error splitting analysis.")
+                self.strategy_card.content.setPlainText("Error splitting analysis.")
 
         except AIClientError as e:
+            logging.error(f"Error generating combined analysis: {e}")
             self._show_error(str(e))
         except Exception as e:
+            logging.error(f"Unexpected error during combined analysis generation: {e}")
             self._show_error(f"An unexpected error occurred: {str(e)}")
 
     def _update_recommendations(self, analysis_text):
@@ -836,6 +912,18 @@ class ModernStockApp(QMainWindow):
         user_message = self.chat_input.text()
         self.chat_history.append("\n<br><div style='margin: 10px 0;'><b>You:</b> " + user_message + "</div>")
         self.chat_input.clear()
+        
+        # Add loading indicator
+        self.chat_history.append(
+            """<div style='background-color: #333333; margin: 10px 0; padding: 10px; border-radius: 5px;'>
+            <b>AI Assistant:</b><br><br>Thinking...</div><br>"""
+        )
+        QApplication.processEvents()  # Update UI immediately
+        
+        # Find the last item to replace later
+        cursor = self.chat_history.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        last_block_pos = cursor.position()
 
         try:
             context = self._create_chat_context()
@@ -849,8 +937,14 @@ class ModernStockApp(QMainWindow):
             Format your response with clear paragraphs and bullet points where appropriate.
             """
 
-            # Use CHAT_MODEL instead of default model
-            response = self.ai_client.analyze(prompt, "financial advisor", model=CHAT_MODEL)
+            response = self.ai_client.analyze(
+                prompt, 
+                "financial advisor", 
+                model=OLLAMA_MODEL, 
+                retries=3, 
+                backoff_factor=2.0
+            )
+            
             ai_response = response['message']['content']
             cleaned_response = remove_think_tags(ai_response)
             
@@ -858,6 +952,11 @@ class ModernStockApp(QMainWindow):
             formatted_response = cleaned_response.replace("\n", "<br>")  # Convert newlines to HTML breaks
             formatted_response = formatted_response.replace("• ", "<br>• ")  # Add spacing before bullet points
             formatted_response = formatted_response.replace("- ", "<br>• ")  # Convert dashes to bullet points
+            
+            # Remove the loading indicator and add the real response
+            cursor = self.chat_history.textCursor()
+            cursor.setPosition(last_block_pos, QTextCursor.KeepAnchor)
+            cursor.removeSelectedText()
             
             # Add the formatted response with styling
             self.chat_history.append(
@@ -867,6 +966,11 @@ class ModernStockApp(QMainWindow):
             )
             
         except Exception as e:
+            # Remove the loading indicator and add error message
+            cursor = self.chat_history.textCursor()
+            cursor.setPosition(last_block_pos, QTextCursor.KeepAnchor)
+            cursor.removeSelectedText()
+            
             self.chat_history.append(
                 """<div style='background-color: #3d1f1f; margin: 10px 0; padding: 10px; border-radius: 5px;'>
                 <b>AI:</b> Sorry, I encountered an error: """ + str(e) + 
@@ -877,6 +981,85 @@ class ModernStockApp(QMainWindow):
         self.chat_history.verticalScrollBar().setValue(
             self.chat_history.verticalScrollBar().maximum()
         )
+
+    def _generate_analysis(self, stock, investment_amount, investment_timeframe):
+        # Generate analysis using AI client
+        try:
+            # Long-term analysis
+            lt_prompt = self._create_long_term_prompt(stock, investment_amount, investment_timeframe)
+            lt_response = self.ai_client.analyze(lt_prompt, "financial analyst", model=OLLAMA_MODEL)
+            lt_content = lt_response['message']['content']
+            lt_content = remove_think_tags(lt_content)  # Remove <think> tags
+            self.long_term_card.content.setPlainText(lt_content)
+
+            # Day-trade analysis 
+            dt_prompt = self._create_day_trade_prompt(stock, investment_amount, investment_timeframe)
+            dt_response = self.ai_client.analyze(dt_prompt, "day trading expert", model=OLLAMA_MODEL)
+            dt_content = dt_response['message']['content']
+            dt_content = remove_think_tags(dt_content)  # Remove <think> tags
+            self.day_trade_card.content.setPlainText(dt_content)
+
+            # Generate investment strategy
+            strategy_prompt = self._create_strategy_prompt(stock, investment_amount, investment_timeframe)
+            strategy_response = self.ai_client.analyze(strategy_prompt, "investment strategist", model=OLLAMA_MODEL)
+            strategy_content = strategy_response['message']['content']
+            strategy_content = remove_think_tags(strategy_content)
+            self.strategy_card.content.setPlainText(strategy_content)
+
+            # Update recommendations
+            self._update_recommendations(lt_response['message']['content'])
+
+        except AIClientError as e:
+            logging.error(f"Error generating analysis: {e}")
+            self._show_error(str(e))
+        except Exception as e:
+            logging.error(f"Unexpected error during analysis generation: {e}")
+            self._show_error(f"An unexpected error occurred: {str(e)}")
+
+    def _create_long_term_prompt(self, stock_data, investment_amount, investment_timeframe):
+        current_price = stock_data['c']
+
+        prompt = f"""
+        Analyze the long-term investment potential of {self.current_ticker}.
+        The current stock price is ${current_price:.2f}.
+        I am planning to invest ${investment_amount:.2f} for a timeframe of {investment_timeframe} days.
+        Provide a detailed analysis covering potential growth factors, risks, and a final investment recommendation.
+        Also, provide a buy, hold, and sell suggestion.
+        """
+        return prompt
+
+    def _create_day_trade_prompt(self, stock_data, investment_amount, investment_timeframe):
+        current_price = stock_data['c']
+
+        prompt = f"""
+        Provide a day trading analysis for {self.current_ticker}.
+        The current stock price is ${current_price:.2f}.
+        I am considering allocating ${investment_amount:.2f} for day trading over a period of {investment_timeframe} days.
+        Focus on potential entry and exit points, technical indicators, and risk management strategies.
+        Also, provide a buy, hold, and sell suggestion.
+        """
+        return prompt
+
+    def _create_strategy_prompt(self, stock_data, investment_amount, investment_timeframe):
+        current_price = stock_data['c']
+
+        prompt = f"""
+        Create a clear, step-by-step investment strategy for {self.current_ticker}.
+        Investment Amount: ${investment_amount:.2f}
+        Current Price: ${current_price:.2f}
+        Timeframe: {investment_timeframe} days
+
+        Please provide specific instructions for:
+        1. The exact price point to enter the investment (entry price)
+        2. How long to hold the investment
+        3. The target price to sell and take profits
+        4. Specific conditions for when to reinvest
+        5. Stop loss recommendation to minimize risk
+
+        Format the response clearly with bullet points and specific numbers.
+        Avoid general advice - provide exact figures and timelines.
+        """
+        return prompt
 
     def _create_chat_context(self):
         """Create context from current stock analysis for the AI"""

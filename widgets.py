@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QGridLayout, QStyle, QTabWidget, QFrame, QScrollArea,
     QDialog, QDialogButtonBox, QStackedWidget, QSizePolicy,
     QComboBox, QToolBar, QMenuBar, QMenu, QFormLayout, QSlider,
-    QGraphicsProxyWidget
+    QGraphicsProxyWidget, QProgressBar
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QSettings, QUrl
 from PySide6.QtGui import QFont, QColor, QActionGroup, QAction
@@ -23,6 +23,18 @@ from pyqtgraph import PlotWidget, AxisItem
 # Configuration
 NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"
 NEWS_API_URL = "https://newsapi.org/v2/everything"
+
+DEFAULTS = {
+    "profit_target": 0.10  # 10% profit target by default
+}
+
+def format_percentage(value):
+    """Format a decimal value as a percentage string."""
+    return f"{value * 100:.1f}%"
+
+def format_price(value):
+    """Format a value as a price string."""
+    return f"${value:.2f}"
 
 # Modern design constants
 THEMES = {
@@ -832,6 +844,101 @@ class RecommendationWidget(QFrame):
             label.setStyleSheet(f"color: {THEMES[self.current_theme]['text']}")
             self.grid.addWidget(label, row, 0, 1, 2)
             row += 1
+
+class ProfitTarget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Title
+        title = QLabel("Profit Target Analysis")
+        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        layout.addWidget(title)
+        
+        # Current Price
+        self.current_price_label = QLabel("Current Price: N/A")
+        self.current_price_label.setStyleSheet("color: #e0e0e0;")
+        layout.addWidget(self.current_price_label)
+        
+        # Profit Target
+        self.profit_target_label = QLabel(f"Target Profit: {format_percentage(DEFAULTS['profit_target'])}")
+        self.profit_target_label.setStyleSheet("color: #4CAF50;")  # Green color
+        layout.addWidget(self.profit_target_label)
+        
+        # Target Price
+        self.target_price_label = QLabel("Target Price: N/A")
+        self.target_price_label.setStyleSheet("color: #e0e0e0;")
+        layout.addWidget(self.target_price_label)
+        
+        # Progress Bar with modern style
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 5px;
+                background-color: #2d2d2d;
+                height: 20px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background-color: #4CAF50;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
+        
+        # Set border and background for the widget
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1e1e1e;
+                border: 1px solid #333;
+                border-radius: 8px;
+            }
+        """)
+        
+        # Set size policy
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.setMinimumHeight(150)
+
+    def update_profit_target(self, current_price):
+        """
+        Update profit target analysis with current price.
+        
+        Args:
+            current_price (float): Current stock price
+        """
+        try:
+            current_price = float(current_price)
+            profit_target = DEFAULTS['profit_target']
+            target_price = current_price * (1 + profit_target)
+            progress = min(100, (current_price / target_price) * 100)
+            
+            self.current_price_label.setText(f"Current Price: {format_price(current_price)}")
+            self.target_price_label.setText(f"Target Price: {format_price(target_price)}")
+            self.progress_bar.setValue(int(progress))
+            
+            # Update colors based on progress
+            if progress >= 100:
+                self.progress_bar.setStyleSheet("""
+                    QProgressBar { border: none; border-radius: 5px; background-color: #2d2d2d; }
+                    QProgressBar::chunk { border-radius: 5px; background-color: #4CAF50; }
+                """)
+                self.target_price_label.setStyleSheet("color: #4CAF50;")  # Green when target reached
+            else:
+                self.progress_bar.setStyleSheet("""
+                    QProgressBar { border: none; border-radius: 5px; background-color: #2d2d2d; }
+                    QProgressBar::chunk { border-radius: 5px; background-color: #00bcd4; }
+                """)
+                self.target_price_label.setStyleSheet("color: #e0e0e0;")
+            
+        except (ValueError, TypeError) as e:
+            print(f"Error updating profit target: {e}")
+            self.current_price_label.setText("Current Price: N/A")
+            self.target_price_label.setText("Target Price: N/A")
+            self.progress_bar.setValue(0)
 
 class ModernStockApp(QMainWindow):
     def __init__(self):
