@@ -1,0 +1,122 @@
+2025-03-03 22:40:02,916 - INFO - Starting Stoxalotl - log file: c:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\logs\stoxalotl_20250303_224002.log
+2025-03-03 22:40:02,917 - INFO - Running system checks...
+2025-03-03 22:40:02,935 - INFO - Starting system checks
+2025-03-03 22:40:02,935 - INFO - Python version: 3.12.3
+2025-03-03 22:40:02,936 - INFO - Check passed: Python version
+2025-03-03 22:40:03,003 - INFO - Found PySide6 (version: 6.8.2.1)
+2025-03-03 22:40:03,112 - INFO - Found numpy (version: 2.2.3)
+2025-03-03 22:40:03,541 - INFO - Found pandas (version: 2.2.3)
+2025-03-03 22:40:03,809 - INFO - Found pyqtgraph (version: 0.13.7)
+2025-03-03 22:40:04,164 - INFO - Found requests (version: 2.32.3)
+2025-03-03 22:40:04,740 - INFO - Found ollama (version: unknown)
+2025-03-03 22:40:04,743 - INFO - Found tradingview_ta (version: 3.3.0)
+2025-03-03 22:40:04,744 - INFO - Check passed: Dependencies
+2025-03-03 22:40:04,744 - INFO - Check passed: API keys
+2025-03-03 22:40:04,745 - INFO - Check passed: Directories
+2025-03-03 22:40:04,745 - INFO - All system checks passed!
+2025-03-03 22:40:04,745 - INFO - Starting main application...
+2025-03-03 22:40:04,767 - INFO - Application starting
+2025-03-03 22:40:04,789 - INFO - Rate limiter initialized for Finnhub: 0.5/sec, burst=3
+2025-03-03 22:40:04,790 - INFO - Rate limiter initialized for NewsAPI: 0.2/sec, burst=2
+2025-03-03 22:40:04,790 - INFO - Rate limiter initialized for Ollama: 0.33/sec, burst=1
+2025-03-03 22:40:04,791 - INFO - API Request Manager initialized with 10.0s interval
+2025-03-03 22:40:04,811 - INFO - Initializing application...
+2025-03-03 22:40:04,837 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-03 22:40:04,837 - INFO - Ollama models are available
+2025-03-03 22:40:04,844 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'market', 'from': '2025-03-01', 'sortBy': 'relevancy', 'language': 'en', 'apiKey': 'c91f9673406647e280aa6faf87ef892a', 'pageSize': 5}
+2025-03-03 22:40:05,353 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-03 22:40:05,354 - INFO - Ollama models are available
+2025-03-03 22:40:05,354 - INFO - Requesting AI analysis for role: sector analyst
+2025-03-03 22:40:05,354 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-03 22:40:12,526 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-03 22:40:25,600 - INFO - Making Finnhub request: https://finnhub.io/api/v1/quote with params {'symbol': 'TSLA', 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:26,771 - INFO - Using cached stock data for TSLA
+2025-03-03 22:40:26,801 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'TSLA', 'from': '2025-02-28', 'sortBy': 'relevancy', 'language': 'en', 'apiKey': 'c91f9673406647e280aa6faf87ef892a', 'pageSize': 3}
+2025-03-03 22:40:27,215 - INFO - Updating chart for TSLA
+2025-03-03 22:40:27,216 - INFO - Chart update with ticker=TSLA, time_frame=3M, type=Both
+2025-03-03 22:40:27,216 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:27,218 - INFO - Chart request time range: from=1733265627 (2024-12-03), to=1741041627 (2025-03-03)
+2025-03-03 22:40:27,218 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:27,219 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265627, 'to': 1741041627, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:27,387 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265627&to=1741041627&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:27,388 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265627&to=1741041627&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:27,388 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:27,389 - INFO - Loaded data rows: 65
+2025-03-03 22:40:27,542 - INFO - Chart update completed successfully
+2025-03-03 22:40:27,542 - INFO - Chart update method called successfully
+2025-03-03 22:40:27,542 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:27,548 - INFO - Chart request time range: from=1733265627 (2024-12-03), to=1741041627 (2025-03-03)
+2025-03-03 22:40:27,548 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:27,548 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265627, 'to': 1741041627, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:27,687 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265627&to=1741041627&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:27,687 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265627&to=1741041627&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:27,688 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:27,689 - INFO - Loaded data rows: 65
+2025-03-03 22:40:27,717 - INFO - Chart update completed successfully
+2025-03-03 22:40:27,721 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-03 22:40:27,722 - INFO - Ollama models are available
+2025-03-03 22:40:27,722 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-03 22:40:27,722 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-03 22:40:35,633 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-03 22:40:35,643 - INFO - Using cached stock data for TSLA
+2025-03-03 22:40:36,645 - INFO - Using cached stock data for TSLA
+2025-03-03 22:40:36,648 - INFO - Using cached news data for TSLA
+2025-03-03 22:40:36,651 - INFO - Updating chart for TSLA
+2025-03-03 22:40:36,651 - INFO - Chart update with ticker=TSLA, time_frame=3M, type=Both
+2025-03-03 22:40:36,651 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:36,659 - INFO - Chart request time range: from=1733265636 (2024-12-03), to=1741041636 (2025-03-03)
+2025-03-03 22:40:36,659 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:36,660 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265636, 'to': 1741041636, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:36,820 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265636&to=1741041636&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:36,821 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265636&to=1741041636&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:36,821 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:36,822 - INFO - Loaded data rows: 65
+2025-03-03 22:40:36,850 - INFO - Chart update completed successfully
+2025-03-03 22:40:36,851 - INFO - Chart update method called successfully
+2025-03-03 22:40:36,851 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:36,857 - INFO - Chart request time range: from=1733265636 (2024-12-03), to=1741041636 (2025-03-03)
+2025-03-03 22:40:36,857 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:36,858 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265636, 'to': 1741041636, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:37,025 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265636&to=1741041636&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:37,026 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265636&to=1741041636&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:37,026 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:37,027 - INFO - Loaded data rows: 65
+2025-03-03 22:40:37,056 - INFO - Chart update completed successfully
+2025-03-03 22:40:37,062 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-03 22:40:37,062 - INFO - Ollama models are available
+2025-03-03 22:40:37,062 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-03 22:40:37,062 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-03 22:40:46,695 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-03 22:40:46,704 - INFO - Using cached stock data for TSLA
+2025-03-03 22:40:47,706 - INFO - Using cached stock data for TSLA
+2025-03-03 22:40:47,709 - INFO - Using cached news data for TSLA
+2025-03-03 22:40:47,711 - INFO - Updating chart for TSLA
+2025-03-03 22:40:47,711 - INFO - Chart update with ticker=TSLA, time_frame=3M, type=Both
+2025-03-03 22:40:47,712 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:47,718 - INFO - Chart request time range: from=1733265647 (2024-12-03), to=1741041647 (2025-03-03)
+2025-03-03 22:40:47,719 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:47,719 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265647, 'to': 1741041647, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:47,861 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265647&to=1741041647&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:47,861 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265647&to=1741041647&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:47,861 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:47,863 - INFO - Loaded data rows: 65
+2025-03-03 22:40:47,889 - INFO - Chart update completed successfully
+2025-03-03 22:40:47,890 - INFO - Chart update method called successfully
+2025-03-03 22:40:47,890 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-03 22:40:47,896 - INFO - Chart request time range: from=1733265647 (2024-12-03), to=1741041647 (2025-03-03)
+2025-03-03 22:40:47,896 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-03 22:40:47,897 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733265647, 'to': 1741041647, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-03 22:40:48,031 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265647&to=1741041647&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:48,031 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733265647&to=1741041647&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-03 22:40:48,032 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-03 22:40:48,033 - INFO - Loaded data rows: 65
+2025-03-03 22:40:48,059 - INFO - Chart update completed successfully
+2025-03-03 22:40:48,063 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-03 22:40:48,063 - INFO - Ollama models are available
+2025-03-03 22:40:48,064 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-03 22:40:48,064 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-03 22:40:55,642 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-03 22:41:15,113 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-03 22:41:15,113 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-03 22:41:15,114 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-03 22:41:15,114 - INFO - All API request queues have been shut down

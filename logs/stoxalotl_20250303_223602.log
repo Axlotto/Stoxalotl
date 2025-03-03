@@ -1,0 +1,9 @@
+2025-03-03 22:36:02,065 - INFO - Starting Stoxalotl - log file: c:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\logs\stoxalotl_20250303_223602.log
+2025-03-03 22:36:02,065 - INFO - Running system checks...
+2025-03-03 22:36:02,071 - CRITICAL - Error during application startup: cannot import name 'run_all_checks' from 'system_check' (c:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\system_check.py)
+
+Traceback (most recent call last):
+  File "c:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\run_stoxalotl.py", line 54, in <module>
+    from system_check import run_all_checks
+ImportError: cannot import name 'run_all_checks' from 'system_check' (c:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\system_check.py)
+

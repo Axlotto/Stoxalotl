@@ -69,8 +69,8 @@ NEWS_API_URL = "https://newsapi.org/v2/everything"
 ALPHA_VANTAGE_API_KEY = "3Q4S7JWD4LYZRUCI"  # Replace with your actual key
 ALPHA_VANTAGE_API_URL = "https://www.alphavantage.co/query"
 
-# Finnhub API Configuration
-FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"
+# Finnhub API Configuration - replace with a valid key or leave dummy for testing
+FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Replace with your actual key or use "demo_key" for fallback to dummy data
 FINNHUB_API_URL = "https://finnhub.io/api/v1"
 
 # Chart Configuration - More options
@@ -102,6 +102,15 @@ TA_CONFIG = {
     "screener": "america",
     "exchange": "NASDAQ",
     "interval": "1D"
+}
+
+# Configuration for dummy data generation (when APIs fail)
+DUMMY_DATA_CONFIG = {
+    "use_fallback": True,  # Whether to use dummy data when API calls fail
+    "realistic_patterns": True,  # Whether to generate realistic price patterns
+    "seed_from_ticker": True,  # Use ticker name to seed random generator for consistent results
+    "volatility": 0.02,  # Base volatility for dummy data
+    "base_price_range": (50, 250)  # Range of base prices for dummy data
 }
 
 # Application Defaults

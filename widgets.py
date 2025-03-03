@@ -1,9 +1,8 @@
 import sys
 import re
-import yfinance as yf
-import ollama
 import requests
 import numpy as np
+import logging
 from datetime import datetime, timedelta
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -17,8 +16,11 @@ from PySide6.QtCore import Qt, QTimer, Signal, QSettings, QUrl
 from PySide6.QtGui import QFont, QColor, QActionGroup, QAction
 import pyqtgraph as pg
 from PySide6.QtWebEngineWidgets import QWebEngineView
-import pyqtgraph as pg
 from pyqtgraph import PlotWidget, AxisItem
+from api_client import StockAPI
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Configuration
 NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"
@@ -108,18 +110,27 @@ class KeyMetrics(QFrame):
                 widget.deleteLater()
 
         # Add new metrics
-        for row, (key, value) in enumerate(metrics.items()):
-            lbl = QLabel(key)
+        row = 0
+        for key, value in metrics.items():
+            # Format the key for display
+            display_key = key.replace('_', ' ').title()
+            
+            lbl = QLabel(display_key)
             lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
             lbl.setStyleSheet(f"color: {THEMES['Dark']['text-secondary']}")
 
             # Format the value appropriately
-            if isinstance(value, (int, float)):
-                if key == 'market_cap':
-                    formatted_value = f"${value/1e9:.2f}B"
+            if isinstance(value, (int, float, np.floating)):
+                if 'price' in key.lower() or 'close' in key.lower() or 'high' in key.lower() or 'low' in key.lower() or 'open' in key.lower():
+                    formatted_value = f"${value:.2f}"
+                elif key == 'market_cap' or key == 'marketcapitalization':
+                    if value >= 1e9:
+                        formatted_value = f"${value/1e9:.2f}B"
+                    else:
+                        formatted_value = f"${value/1e6:.2f}M"
                 elif key == 'volume':
                     formatted_value = f"{value:,.0f}"
-                elif key == 'dividend_yield':
+                elif 'dividend' in key.lower() or 'yield' in key.lower() or 'change %' in key.lower():
                     formatted_value = f"{value:.2f}%"
                 else:
                     formatted_value = f"{value:.2f}"
@@ -128,10 +139,32 @@ class KeyMetrics(QFrame):
 
             val = QLabel(formatted_value)
             val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
-            val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
+            
+            # Set color based on value type
+            if 'change' in key.lower() or key.lower() == 'current price':
+                if isinstance(value, (int, float, np.floating)):
+                    if key.lower() == 'current price':
+                        # Compare with previous close if available
+                        if 'previous close' in metrics and value > metrics['Previous Close']:
+                            val.setStyleSheet(f"color: {THEMES['Dark']['positive']}")
+                        elif 'previous close' in metrics and value < metrics['Previous Close']:
+                            val.setStyleSheet(f"color: {THEMES['Dark']['negative']}")
+                        else:
+                            val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
+                    elif value > 0:
+                        val.setStyleSheet(f"color: {THEMES['Dark']['positive']}")
+                    elif value < 0:
+                        val.setStyleSheet(f"color: {THEMES['Dark']['negative']}")
+                    else:
+                        val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
+                else:
+                    val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
+            else:
+                val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
 
             self.grid.addWidget(lbl, row, 0)
             self.grid.addWidget(val, row, 1)
+            row += 1
 
 class DateAxis(AxisItem):
     def tickStrings(self, values, scale, spacing):
@@ -440,188 +473,173 @@ class StockChart(PlotWidget):
         return peaks
 
     def update_chart(self, ticker, time_frame="3M", chart_type="Both"):
-        stock = yf.Ticker(ticker)
-        periods = {
-            "1D": ("1d", "5m"),
-            "1W": ("5d", "15m"),
-            "1M": ("1mo", "1h"),
-            "3M": ("3mo", "1d"),
-            "6M": ("6mo", "1d"),
-            "1Y": ("1y", "1wk"),
-            "5Y": ("5y", "1mo")
-        }
-        period, interval = periods.get(time_frame, ("3mo", "1d"))
-        
-        hist = stock.history(period=period, interval=interval)
-        if hist.empty:
-            return
+        try:
+            logging.info(f"Updating chart for {ticker} with {time_frame} timeframe and {chart_type} type")
             
-        # Clear previous items
-        self.clear()
-        for label in self.peak_labels:
-            self.removeItem(label)
-        self.peak_labels.clear()
-            
-        dates = hist.index.view(np.int64) // 10**9
-        opens = hist['Open'].values
-        closes = hist['Close'].values
-        highs = hist['High'].values
-        lows = hist['Low'].values
-        
-        # Find peaks
-        from scipy.signal import find_peaks
-        peaks, _ = find_peaks(closes, distance=20)  # Adjust distance as needed
-        
-        # Plot line chart
-        if chart_type in ["Line", "Both"]:
-            line = self.plot(dates, closes, pen=pg.mkPen(THEMES["Dark"]["primary"], width=2), name="Price")
-            
-            # Add peak labels
-            for peak_idx in peaks:
-                peak_price = closes[peak_idx]
-                peak_date = dates[peak_idx]
-                label = pg.TextItem(
-                    text=f"£{peak_price:.2f}",
-                    color=THEMES["Dark"]["text"],
-                    anchor=(0, 1)
-                )
-                self.addItem(label)
-                label.setPos(peak_date, peak_price)
-                self.peak_labels.append(label)
-        
-        # Plot candlesticks
-        if chart_type in ["Candlestick", "Both"]:
-            for i in range(len(dates)):
-                candlestick = CandleStickItem(
-                    x=dates[i],
-                    open=opens[i],
-                    close=closes[i],
-                    high=highs[i],
-                    low=lows[i],
-                    brush=pg.mkBrush(THEMES["Dark"]["positive"]) if closes[i] > opens[i] 
-                          else pg.mkBrush(THEMES["Dark"]["negative"]),
-                    pen=pg.mkPen(THEMES["Dark"]["border"])
-                )
-                self.addItem(candlestick)
-
-        # Set fixed range for y-axis
-        y_min = min(lows) * 0.95
-        y_max = max(highs) * 1.05
-        self.setYRange(y_min, y_max)
-
-        # Clear previous items
-        self.clear()
-        for line in self.support_lines + self.resistance_lines:
-            self.removeItem(line)
-        for label in self.peak_labels:
-            self.removeItem(label)
-        self.support_lines.clear()
-        self.resistance_lines.clear()
-        self.peak_labels.clear()
-
-        stock = yf.Ticker(ticker)
-        periods = {
-            "1D": ("1d", "5m"),
-            "1W": ("5d", "15m"),
-            "1M": ("1mo", "1h"),
-            "3M": ("3mo", "1d"),
-            "6M": ("6mo", "1d"),
-            "1Y": ("1y", "1wk"),
-            "5Y": ("5y", "1mo")
-        }
-        period, interval = periods.get(time_frame, ("3mo", "1d"))
-        
-        hist = stock.history(period=period, interval=interval)
-        if hist.empty:
-            return
-            
-        dates = hist.index.view(np.int64) // 10**9
-        closes = hist['Close'].values
-        
-        # Find peaks for different time periods
-        self.period_peaks = self._find_period_peaks(hist, dates)
-        
-        # Calculate support and resistance levels
-        levels = self._calculate_support_resistance(closes)
-        
-        # Plot base chart (line or candlesticks)
-        if chart_type in ["Line", "Both"]:
-            self.plot(dates, closes, pen=pg.mkPen(THEMES["Dark"]["primary"], width=2), name="Price")
-        
-        if chart_type in ["Candlestick", "Both"]:
-            # ... existing candlestick plotting code ...
-            pass
-
-        # Add support and resistance lines
-        for date_idx, price, level_type in levels:
-            if level_type == 'support':
-                line = self.addLine(y=price, pen=pg.mkPen('g', width=1, style=Qt.DashLine))
-                self.support_lines.append(line)
-            else:  # resistance
-                line = self.addLine(y=price, pen=pg.mkPen('r', width=1, style=Qt.DashLine))
-                self.resistance_lines.append(line)
-
-        # Add period peak labels
-        y_range = max(closes) - min(closes)
-        for i, (period, data) in enumerate(self.period_peaks.items()):
-            # Create high label
-            high_label = pg.TextItem(
-                text=f"{period} High: ${data['high']:.2f}",
-                color=THEMES["Dark"]["positive"],
-                anchor=(0, -1.5)
-            )
-            self.addItem(high_label)
-            high_label.setPos(dates[-1], data['high'])
-            self.peak_labels.append(high_label)
-            
-            # Create low label
-            low_label = pg.TextItem(
-                text=f"{period} Low: ${data['low']:.2f}",
-                color=THEMES["Dark"]["negative"],
-                anchor=(0, 1.5)
-            )
-            self.addItem(low_label)
-            low_label.setPos(dates[-1], data['low'])
-            self.peak_labels.append(low_label)
-
-        # Store the initial range for reset functionality
-        self.original_range = {
-            'x': (min(dates), max(dates)),
-            'y': (y_min, y_max)
-        }
-        
-        # Set initial view without locking it
-        self.getViewBox().setRange(
-            xRange=(min(dates), max(dates)),
-            yRange=(y_min, y_max),
-            padding=0.1
-        )
-        
-        # Add control hint
-        self.addItem(self.hint_text)
-        self.hint_text.setPos(dates[0], y_max)
-
-        # Store initial view state
-        self.last_view_state = self.getViewBox().getState()
-        
-        # Set initial range but don't lock it
-        self.setXRange(min(dates), max(dates), padding=0.1)
-        self.setYRange(y_min, y_max, padding=0.1)
-
-        # Add items with visibility respect
-        if self.show_peaks:
-            for label in self.peak_labels:
-                label.setVisible(True)
-        else:
-            for label in self.peak_labels:
-                label.setVisible(False)
-
-        if self.show_support_resistance:
+            # Clear previous items
+            self.clear()
             for line in self.support_lines + self.resistance_lines:
-                line.setVisible(True)
-        else:
-            for line in self.support_lines + self.resistance_lines:
-                line.setVisible(False)
+                try:
+                    self.removeItem(line)
+                except Exception:
+                    pass  # Item might already be removed
+            for label in self.peak_labels:
+                try:
+                    self.removeItem(label)
+                except Exception:
+                    pass  # Item might already be removed
+                    
+            self.support_lines.clear()
+            self.resistance_lines.clear()
+            self.peak_labels.clear()
+            
+            # Create a simple message while loading
+            loading_text = pg.TextItem(text="Loading chart data... (this may take a moment due to rate limiting)", color=(200, 200, 200))
+            self.addItem(loading_text)
+            QApplication.processEvents()  # Update UI to show loading message
+            
+            # Try to get the stock data with error handling
+            try:
+                # Use Finnhub to get chart data
+                stock_api = StockAPI()
+                hist = stock_api.get_chart_data(ticker, time_frame)
+                
+                if hist.empty:
+                    self.clear()
+                    error_text = pg.TextItem(text=f"No data available for {ticker}", color=(255, 50, 50))
+                    self.addItem(error_text)
+                    logging.warning(f"No historical data found for {ticker}")
+                    return
+                
+                # Remove loading message
+                self.removeItem(loading_text)
+                
+            except Exception as data_error:
+                self.clear()
+                error_text = pg.TextItem(text=f"Error fetching data: {str(data_error)}", color=(255, 50, 50))
+                self.addItem(error_text)
+                logging.error(f"Data fetch error: {data_error}")
+                return
+                
+            # Log data statistics
+            logging.info(f"Loaded data rows: {len(hist)}")
+            
+            # Convert index to timestamps for plotting
+            try:
+                dates = hist.index.astype('int64') // 10**9
+                closes = hist['Close'].values
+            except Exception as conversion_error:
+                self.clear()
+                error_text = pg.TextItem(text=f"Data conversion error: {str(conversion_error)}", color=(255, 50, 50))
+                self.addItem(error_text)
+                logging.error(f"Data conversion error: {conversion_error}")
+                return
+            
+            # Simple plot for all chart types - ensures we have a baseline
+            try:
+                self.plot(dates, closes, pen=pg.mkPen(THEMES["Dark"]["primary"], width=1.5), name="Close")
+            except Exception as plot_error:
+                self.clear()
+                error_text = pg.TextItem(text=f"Error plotting line: {str(plot_error)}", color=(255, 50, 50))
+                self.addItem(error_text)
+                logging.error(f"Basic plotting error: {plot_error}")
+                return
+                
+            # Plot specific chart type
+            if chart_type in ["Candlestick", "Both"] and len(hist) > 0:
+                try:
+                    # Try using a more efficient approach for many candles
+                    if len(hist) > 100:
+                        # For many candles, batch them into chunks
+                        for chunk_start in range(0, len(hist), 50):
+                            chunk_end = min(chunk_start + 50, len(hist))
+                            for i in range(chunk_start, chunk_end):
+                                # Create candlestick
+                                candlestick = CandleStickItem(
+                                    x=dates[i],
+                                    open=hist['Open'].iloc[i],
+                                    close=hist['Close'].iloc[i],
+                                    high=hist['High'].iloc[i],
+                                    low=hist['Low'].iloc[i],
+                                    brush=pg.mkBrush(THEMES["Dark"]["positive"]) if hist['Close'].iloc[i] >= hist['Open'].iloc[i] 
+                                        else pg.mkBrush(THEMES["Dark"]["negative"]),
+                                    pen=pg.mkPen(THEMES["Dark"]["border"])
+                                )
+                                self.addItem(candlestick)
+                            QApplication.processEvents()  # Update UI periodically during rendering
+                    else:
+                        # For fewer candles, add them all at once
+                        for i in range(len(hist)):
+                            candlestick = CandleStickItem(
+                                x=dates[i],
+                                open=hist['Open'].iloc[i],
+                                close=hist['Close'].iloc[i],
+                                high=hist['High'].iloc[i],
+                                low=hist['Low'].iloc[i],
+                                brush=pg.mkBrush(THEMES["Dark"]["positive"]) if hist['Close'].iloc[i] >= hist['Open'].iloc[i] 
+                                    else pg.mkBrush(THEMES["Dark"]["negative"]),
+                                pen=pg.mkPen(THEMES["Dark"]["border"])
+                            )
+                            self.addItem(candlestick)
+                except Exception as candle_error:
+                    # If candlestick rendering fails, just log it and continue with line chart
+                    logging.error(f"Candlestick rendering error: {candle_error}")
+                    
+                    # Add text indicator about candlestick failure
+                    error_note = pg.TextItem(
+                        text="Candlestick rendering failed - showing line chart only", 
+                        color=(255, 150, 50),
+                        anchor=(0, 0)
+                    )
+                    error_note.setPos(dates[0], hist['High'].max())
+                    self.addItem(error_note)
+            
+            # Try to add moving averages
+            try:
+                if len(hist) >= 20:
+                    ma20 = hist['Close'].rolling(window=20).mean()
+                    ma20_valid = ma20.dropna()
+                    if len(ma20_valid) > 0:
+                        ma20_dates = dates[19:]  # Skip NaN values from rolling window
+                        self.plot(ma20_dates, ma20_valid.values, 
+                               pen=pg.mkPen(color=(255, 165, 0), width=1), name="MA20")
+                        
+                if len(hist) >= 50:
+                    ma50 = hist['Close'].rolling(window=50).mean()
+                    ma50_valid = ma50.dropna()
+                    if len(ma50_valid) > 0:
+                        ma50_dates = dates[49:]  # Skip NaN values from rolling window
+                        self.plot(ma50_dates, ma50_valid.values, 
+                               pen=pg.mkPen(color=(138, 43, 226), width=1), name="MA50")
+            except Exception as ma_error:
+                logging.error(f"Moving average plotting error: {ma_error}")
+            
+            # Set range - with error handling
+            try:
+                min_y = hist['Low'].min() * 0.98
+                max_y = hist['High'].max() * 1.02
+                self.setYRange(min_y, max_y)
+                self.setXRange(dates[0], dates[-1])
+                
+                # Store original range for reset function
+                self.original_range = {
+                    'x': (dates[0], dates[-1]),
+                    'y': (min_y, max_y)
+                }
+            except Exception as range_error:
+                logging.error(f"Setting range error: {range_error}")
+                # Try to set a reasonable default range
+                self.autoRange()
+            
+            # Additional debug info
+            logging.info("Chart update completed successfully")
+            
+        except Exception as e:
+            logging.exception(f"Error updating chart: {e}")
+            # Add error message to chart
+            self.clear()  # Clear any partial plotting
+            text = pg.TextItem(text=f"Error loading chart: {str(e)}", color=(255, 0, 0))
+            self.addItem(text)
 
 class StockOverview(QFrame):
     def __init__(self):
@@ -741,7 +759,6 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
         self.setLayout(layout)
 
-
 class RecommendationWidget(QFrame):
     """Widget to display peak prices and support/resistance levels"""
     def __init__(self):
@@ -850,27 +867,27 @@ class ProfitTarget(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
-        
+
         # Title
         title = QLabel("Profit Target Analysis")
         title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(title)
-        
+
         # Current Price
         self.current_price_label = QLabel("Current Price: N/A")
         self.current_price_label.setStyleSheet("color: #e0e0e0;")
         layout.addWidget(self.current_price_label)
-        
+
         # Profit Target
         self.profit_target_label = QLabel(f"Target Profit: {format_percentage(DEFAULTS['profit_target'])}")
         self.profit_target_label.setStyleSheet("color: #4CAF50;")  # Green color
         layout.addWidget(self.profit_target_label)
-        
+
         # Target Price
         self.target_price_label = QLabel("Target Price: N/A")
         self.target_price_label.setStyleSheet("color: #e0e0e0;")
         layout.addWidget(self.target_price_label)
-        
+
         # Progress Bar with modern style
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -919,7 +936,7 @@ class ProfitTarget(QWidget):
             self.current_price_label.setText(f"Current Price: {format_price(current_price)}")
             self.target_price_label.setText(f"Target Price: {format_price(target_price)}")
             self.progress_bar.setValue(int(progress))
-            
+
             # Update colors based on progress
             if progress >= 100:
                 self.progress_bar.setStyleSheet("""
@@ -962,11 +979,11 @@ class ModernStockApp(QMainWindow):
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Menu Bar
         menu_bar = QMenuBar()
         settings_menu = QMenu("&Settings", self)
-        
+
         # Theme Menu
         theme_menu = QMenu("&Theme", self)
         self.theme_group = QActionGroup(self)
@@ -977,16 +994,15 @@ class ModernStockApp(QMainWindow):
             theme_menu.addAction(action)
             if theme == self.current_theme:
                 action.setChecked(True)
-        
+
         # Preferences Action
         pref_action = QAction("Preferences", self)
         pref_action.triggered.connect(self._show_settings)
-        
         settings_menu.addMenu(theme_menu)
         settings_menu.addAction(pref_action)
         menu_bar.addMenu(settings_menu)
         self.setMenuBar(menu_bar)
-        
+
         # Toolbar
         toolbar = QToolBar()
         self.time_frame = QComboBox()
@@ -999,7 +1015,7 @@ class ModernStockApp(QMainWindow):
         toolbar.addWidget(QLabel("Chart Type:"))
         toolbar.addWidget(self.chart_type)
         self.addToolBar(toolbar)
-        
+
         # Main Content
         self.stacked_widget = QStackedWidget()
         self._setup_home_page()
@@ -1010,11 +1026,11 @@ class ModernStockApp(QMainWindow):
     def _setup_home_page(self):
         # Home page implementation similar to previous version
         pass
-        
+
     def _setup_analysis_page(self):
         page = QWidget()
         layout = QHBoxLayout(page)
-        
+
         # Left Panel
         left_panel = QWidget()
         left_panel.setFixedWidth(300)
@@ -1027,21 +1043,20 @@ class ModernStockApp(QMainWindow):
         left_layout.addWidget(self.overview)
         left_layout.addWidget(self.metrics)
         left_layout.addWidget(self.recommendation)
-        
+
         # Right Panel
         right_panel = QTabWidget()
         self.chart = StockChart()
         self.news_card = AnalysisCard("Latest News")
         self.analysis_card = AnalysisCard("AI Analysis")
-        
         right_panel.addTab(self.chart, "Chart")
         right_panel.addTab(self.news_card, "News")
         right_panel.addTab(self.analysis_card, "Analysis")
-        
+
         layout.addWidget(left_panel)
         layout.addWidget(right_panel)
         self.stacked_widget.addWidget(page)
-        
+
     def _apply_theme(self):
         theme = THEMES[self.current_theme]
         self.setStyleSheet(f"""
@@ -1059,24 +1074,24 @@ class ModernStockApp(QMainWindow):
                 border: 1px solid {theme['border']};
             }}
         """)
-        
+
     def _change_theme(self, theme_name):
         self.current_theme = theme_name
         self.settings.setValue("Theme", theme_name)
         self._apply_theme()
-        
+
     def load_settings(self):
         self.model = self.settings.value("Model", "deepseek-r1:1.5b")
         interval = int(self.settings.value("Interval", 15))
         self.update_timer.setInterval(interval * 1000)
-        
+
     def _show_settings(self):
         dialog = SettingsDialog(self)
-        if dialog.exec():
+        if (dialog.exec()):
             self.settings.setValue("Model", dialog.model_selector.currentText())
             self.settings.setValue("Interval", dialog.interval_slider.value())
             self.load_settings()
-            
+
     def _show_news_detail(self, url):
         dialog = QDialog(self)
         web_view = QWebEngineView()
@@ -1091,4 +1106,5 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ModernStockApp()
     window.show()
+
     sys.exit(app.exec())
