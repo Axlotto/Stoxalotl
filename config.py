@@ -62,16 +62,12 @@ OLLAMA_MODEL = "deepseek-r1:1.5b"
 CHAT_MODEL = "llama3.2:1b"  # Add this line
 
 # News API Configuration
-NEWS_API_KEY = "c91f9673406647e280aa6faf87ef892a"  # Replace with your actual key
+NEWS_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Replace with your actual key
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
-# Alpha Vantage API Configuration
-ALPHA_VANTAGE_API_KEY = "3Q4S7JWD4LYZRUCI"  # Replace with your actual key
-ALPHA_VANTAGE_API_URL = "https://www.alphavantage.co/query"
-
-# Finnhub API Configuration - replace with a valid key or leave dummy for testing
-FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Replace with your actual key or use "demo_key" for fallback to dummy data
-FINNHUB_API_URL = "https://finnhub.io/api/v1"
+# Finnhub API Configuration
+FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Use the API key from your example
+FINNHUB_API_URL = "https://finnhub.io/api/v1"  # Keep this for reference but use direct URLs in code
 
 # Chart Configuration - More options
 CHART_CONFIG = {

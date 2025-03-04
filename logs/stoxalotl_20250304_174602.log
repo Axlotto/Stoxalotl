@@ -1,0 +1,261 @@
+2025-03-04 17:46:02,612 - INFO - Starting Stoxalotl - log file: C:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Stoxalotl-2\logs\stoxalotl_20250304_174602.log
+2025-03-04 17:46:02,612 - INFO - Running system checks...
+2025-03-04 17:46:02,617 - INFO - Starting system checks
+2025-03-04 17:46:02,618 - INFO - Python version: 3.12.3
+2025-03-04 17:46:02,618 - INFO - Check passed: Python version
+2025-03-04 17:46:02,689 - INFO - Found PySide6 (version: 6.8.2.1)
+2025-03-04 17:46:03,961 - INFO - Found numpy (version: 1.26.4)
+2025-03-04 17:46:07,074 - INFO - Found pandas (version: 2.2.3)
+2025-03-04 17:46:08,155 - INFO - Found pyqtgraph (version: 0.13.7)
+2025-03-04 17:46:08,890 - INFO - Found requests (version: 2.32.3)
+2025-03-04 17:46:11,347 - INFO - Found ollama (version: unknown)
+2025-03-04 17:46:11,367 - INFO - Found tradingview_ta (version: 3.3.0)
+2025-03-04 17:46:11,367 - INFO - Check passed: Dependencies
+2025-03-04 17:46:11,369 - INFO - Check passed: API keys
+2025-03-04 17:46:11,369 - INFO - Check passed: Directories
+2025-03-04 17:46:11,369 - INFO - All system checks passed!
+2025-03-04 17:46:11,369 - INFO - Starting main application...
+2025-03-04 17:46:11,371 - INFO - Application starting
+2025-03-04 17:46:11,523 - INFO - Rate limiter initialized for Finnhub: 0.5/sec, burst=3
+2025-03-04 17:46:11,523 - INFO - Rate limiter initialized for NewsAPI: 0.2/sec, burst=2
+2025-03-04 17:46:11,523 - INFO - Rate limiter initialized for Ollama: 0.33/sec, burst=1
+2025-03-04 17:46:11,525 - INFO - API Request Manager initialized with 10.0s interval
+2025-03-04 17:46:11,575 - INFO - Initializing application...
+2025-03-04 17:46:11,628 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:46:11,630 - INFO - Ollama models are available
+2025-03-04 17:46:11,652 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'market', 'from': '2025-03-02', 'sortBy': 'relevancy', 'language': 'en', 'apiKey': 'c91f9673406647e280aa6faf87ef892a', 'pageSize': 5}
+2025-03-04 17:46:12,118 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:46:12,118 - INFO - Ollama models are available
+2025-03-04 17:46:12,118 - INFO - Requesting AI analysis for role: sector analyst
+2025-03-04 17:46:12,118 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:46:16,773 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:46:20,508 - INFO - Making Finnhub request: https://finnhub.io/api/v1/quote with params {'symbol': 'TSLA', 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:46:21,702 - INFO - Using cached stock data for TSLA
+2025-03-04 17:46:21,729 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'TSLA', 'from': '2025-03-01', 'sortBy': 'relevancy', 'language': 'en', 'apiKey': 'c91f9673406647e280aa6faf87ef892a', 'pageSize': 3}
+2025-03-04 17:46:21,901 - INFO - Updating chart for TSLA
+2025-03-04 17:46:21,901 - INFO - Chart update with ticker=TSLA, time_frame=3M, type=Both
+2025-03-04 17:46:21,902 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-04 17:46:21,904 - INFO - Chart request time range: from=1733334381 (2024-12-04), to=1741110381 (2025-03-04)
+2025-03-04 17:46:21,904 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-04 17:46:21,904 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733334381, 'to': 1741110381, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:46:22,050 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334381&to=1741110381&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:22,050 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334381&to=1741110381&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:22,050 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-04 17:46:22,053 - INFO - Loaded data rows: 65
+2025-03-04 17:46:22,200 - INFO - Chart update completed successfully
+2025-03-04 17:46:22,200 - INFO - Chart update method called successfully
+2025-03-04 17:46:22,200 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-04 17:46:22,206 - INFO - Chart request time range: from=1733334382 (2024-12-04), to=1741110382 (2025-03-04)
+2025-03-04 17:46:22,206 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-04 17:46:22,206 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733334382, 'to': 1741110382, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:46:22,357 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334382&to=1741110382&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:22,357 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334382&to=1741110382&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:22,358 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-04 17:46:22,358 - INFO - Loaded data rows: 65
+2025-03-04 17:46:22,384 - INFO - Chart update completed successfully
+2025-03-04 17:46:22,390 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:46:22,390 - INFO - Ollama models are available
+2025-03-04 17:46:22,391 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-04 17:46:22,391 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:46:33,609 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:46:33,622 - INFO - Using cached stock data for TSLA
+2025-03-04 17:46:34,624 - INFO - Using cached stock data for TSLA
+2025-03-04 17:46:34,628 - INFO - Using cached news data for TSLA
+2025-03-04 17:46:34,629 - INFO - Updating chart for TSLA
+2025-03-04 17:46:34,629 - INFO - Chart update with ticker=TSLA, time_frame=3M, type=Both
+2025-03-04 17:46:34,630 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-04 17:46:34,636 - INFO - Chart request time range: from=1733334394 (2024-12-04), to=1741110394 (2025-03-04)
+2025-03-04 17:46:34,636 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-04 17:46:34,636 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733334394, 'to': 1741110394, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:46:34,802 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334394&to=1741110394&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:34,802 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334394&to=1741110394&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:34,802 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-04 17:46:34,803 - INFO - Loaded data rows: 65
+2025-03-04 17:46:34,829 - INFO - Chart update completed successfully
+2025-03-04 17:46:34,829 - INFO - Chart update method called successfully
+2025-03-04 17:46:34,829 - INFO - Updating chart for TSLA with 3M timeframe and Both type
+2025-03-04 17:46:34,835 - INFO - Chart request time range: from=1733334394 (2024-12-04), to=1741110394 (2025-03-04)
+2025-03-04 17:46:34,836 - INFO - Attempting to fetch chart data from Finnhub for TSLA
+2025-03-04 17:46:34,836 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'TSLA', 'resolution': 'D', 'from': 1733334394, 'to': 1741110394, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:46:34,981 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334394&to=1741110394&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:34,981 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=TSLA&resolution=D&from=1733334394&to=1741110394&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:46:34,981 - WARNING - Generating dummy chart data for TSLA as fallback
+2025-03-04 17:46:34,983 - INFO - Loaded data rows: 65
+2025-03-04 17:46:35,009 - INFO - Chart update completed successfully
+2025-03-04 17:46:35,014 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:46:35,014 - INFO - Ollama models are available
+2025-03-04 17:46:35,014 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-04 17:46:35,014 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:46:44,988 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:50:11,974 - INFO - Making Finnhub request: https://finnhub.io/api/v1/quote with params {'symbol': 'NVDA', 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:13,132 - INFO - Using cached stock data for TSLA
+2025-03-04 17:50:14,134 - INFO - Using cached stock data for NVDA
+2025-03-04 17:50:14,151 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'NVDA', 'from': '2025-03-01', 'sortBy': 'relevancy', 'language': 'en', 'apiKey': 'c91f9673406647e280aa6faf87ef892a', 'pageSize': 3}
+2025-03-04 17:50:14,317 - INFO - Updating chart for NVDA
+2025-03-04 17:50:14,318 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Both
+2025-03-04 17:50:14,318 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:14,324 - INFO - Chart request time range: from=1733334614 (2024-12-04), to=1741110614 (2025-03-04)
+2025-03-04 17:50:14,325 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:14,325 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334614, 'to': 1741110614, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:14,483 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334614&to=1741110614&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:14,483 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334614&to=1741110614&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:14,483 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:14,484 - INFO - Loaded data rows: 65
+2025-03-04 17:50:14,510 - INFO - Chart update completed successfully
+2025-03-04 17:50:14,510 - INFO - Chart update method called successfully
+2025-03-04 17:50:14,510 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:14,516 - INFO - Chart request time range: from=1733334614 (2024-12-04), to=1741110614 (2025-03-04)
+2025-03-04 17:50:14,516 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:14,517 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334614, 'to': 1741110614, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:14,683 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334614&to=1741110614&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:14,683 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334614&to=1741110614&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:14,684 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:14,685 - INFO - Loaded data rows: 65
+2025-03-04 17:50:14,711 - INFO - Chart update completed successfully
+2025-03-04 17:50:14,716 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:50:14,717 - INFO - Ollama models are available
+2025-03-04 17:50:14,717 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-04 17:50:14,717 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:50:22,913 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:50:22,922 - INFO - Using cached stock data for NVDA
+2025-03-04 17:50:23,923 - INFO - Using cached stock data for TSLA
+2025-03-04 17:50:24,924 - INFO - Using cached stock data for NVDA
+2025-03-04 17:50:24,930 - INFO - Using cached news data for NVDA
+2025-03-04 17:50:24,934 - INFO - Updating chart for NVDA
+2025-03-04 17:50:24,934 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Both
+2025-03-04 17:50:24,934 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:24,941 - INFO - Chart request time range: from=1733334624 (2024-12-04), to=1741110624 (2025-03-04)
+2025-03-04 17:50:24,941 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:24,941 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334624, 'to': 1741110624, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:25,096 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334624&to=1741110624&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:25,096 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334624&to=1741110624&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:25,096 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:25,097 - INFO - Loaded data rows: 65
+2025-03-04 17:50:25,124 - INFO - Chart update completed successfully
+2025-03-04 17:50:25,124 - INFO - Chart update method called successfully
+2025-03-04 17:50:25,124 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:25,131 - INFO - Chart request time range: from=1733334625 (2024-12-04), to=1741110625 (2025-03-04)
+2025-03-04 17:50:25,131 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:25,131 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334625, 'to': 1741110625, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:25,269 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334625&to=1741110625&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:25,270 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334625&to=1741110625&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:25,270 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:25,271 - INFO - Loaded data rows: 65
+2025-03-04 17:50:25,297 - INFO - Chart update completed successfully
+2025-03-04 17:50:25,303 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:50:25,304 - INFO - Ollama models are available
+2025-03-04 17:50:25,304 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-04 17:50:25,304 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:50:33,504 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:50:33,515 - INFO - Using cached stock data for NVDA
+2025-03-04 17:50:34,516 - INFO - Using cached stock data for TSLA
+2025-03-04 17:50:35,518 - INFO - Using cached stock data for NVDA
+2025-03-04 17:50:35,524 - INFO - Using cached news data for NVDA
+2025-03-04 17:50:35,529 - INFO - Updating chart for NVDA
+2025-03-04 17:50:35,529 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Both
+2025-03-04 17:50:35,529 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:35,545 - INFO - Chart request time range: from=1733334635 (2024-12-04), to=1741110635 (2025-03-04)
+2025-03-04 17:50:35,545 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:35,545 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334635, 'to': 1741110635, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:35,679 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334635&to=1741110635&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:35,680 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334635&to=1741110635&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:35,680 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:35,681 - INFO - Loaded data rows: 65
+2025-03-04 17:50:35,707 - INFO - Chart update completed successfully
+2025-03-04 17:50:35,707 - INFO - Chart update method called successfully
+2025-03-04 17:50:35,707 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:35,717 - INFO - Chart request time range: from=1733334635 (2024-12-04), to=1741110635 (2025-03-04)
+2025-03-04 17:50:35,718 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:35,718 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334635, 'to': 1741110635, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:35,887 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334635&to=1741110635&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:35,887 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334635&to=1741110635&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:35,888 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:35,889 - INFO - Loaded data rows: 65
+2025-03-04 17:50:35,914 - INFO - Chart update completed successfully
+2025-03-04 17:50:35,923 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-04 17:50:35,923 - INFO - Ollama models are available
+2025-03-04 17:50:35,923 - INFO - Requesting AI analysis for role: financial analyst
+2025-03-04 17:50:35,923 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-04 17:50:42,839 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-04 17:50:49,591 - INFO - Updating chart for NVDA
+2025-03-04 17:50:49,592 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Candlestick
+2025-03-04 17:50:49,592 - INFO - Updating chart for NVDA with 3M timeframe and Candlestick type
+2025-03-04 17:50:49,601 - INFO - Chart request time range: from=1733334649 (2024-12-04), to=1741110649 (2025-03-04)
+2025-03-04 17:50:49,601 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:49,601 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334649, 'to': 1741110649, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:49,750 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334649&to=1741110649&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:49,750 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334649&to=1741110649&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:49,750 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:49,752 - INFO - Loaded data rows: 65
+2025-03-04 17:50:49,778 - INFO - Chart update completed successfully
+2025-03-04 17:50:49,778 - INFO - Chart update method called successfully
+2025-03-04 17:50:51,609 - INFO - Updating chart for NVDA
+2025-03-04 17:50:51,609 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Line
+2025-03-04 17:50:51,610 - INFO - Updating chart for NVDA with 3M timeframe and Line type
+2025-03-04 17:50:51,619 - INFO - Chart request time range: from=1733334651 (2024-12-04), to=1741110651 (2025-03-04)
+2025-03-04 17:50:51,619 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:51,619 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334651, 'to': 1741110651, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:51,771 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334651&to=1741110651&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:51,771 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334651&to=1741110651&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:51,771 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:51,773 - INFO - Loaded data rows: 65
+2025-03-04 17:50:51,780 - INFO - Chart update completed successfully
+2025-03-04 17:50:51,781 - INFO - Chart update method called successfully
+2025-03-04 17:50:54,309 - INFO - Updating chart for NVDA
+2025-03-04 17:50:54,309 - INFO - Chart update with ticker=NVDA, time_frame=3M, type=Both
+2025-03-04 17:50:54,309 - INFO - Updating chart for NVDA with 3M timeframe and Both type
+2025-03-04 17:50:54,314 - INFO - Chart request time range: from=1733334654 (2024-12-04), to=1741110654 (2025-03-04)
+2025-03-04 17:50:54,315 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:54,315 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'D', 'from': 1733334654, 'to': 1741110654, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:54,468 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334654&to=1741110654&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:54,468 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=D&from=1733334654&to=1741110654&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:54,468 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:54,470 - INFO - Loaded data rows: 65
+2025-03-04 17:50:54,496 - INFO - Chart update completed successfully
+2025-03-04 17:50:54,496 - INFO - Chart update method called successfully
+2025-03-04 17:50:55,792 - INFO - Updating chart for NVDA
+2025-03-04 17:50:55,792 - INFO - Chart update with ticker=NVDA, time_frame=1Y, type=Both
+2025-03-04 17:50:55,792 - INFO - Updating chart for NVDA with 1Y timeframe and Both type
+2025-03-04 17:50:55,801 - INFO - Chart request time range: from=1709574655 (2024-03-04), to=1741110655 (2025-03-04)
+2025-03-04 17:50:55,802 - INFO - Attempting to fetch chart data from Finnhub for NVDA
+2025-03-04 17:50:55,802 - INFO - Making Finnhub request: https://finnhub.io/api/v1/stock/candle with params {'symbol': 'NVDA', 'resolution': 'W', 'from': 1709574655, 'to': 1741110655, 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:50:55,953 - ERROR - Error executing queued request: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=W&from=1709574655&to=1741110655&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:55,954 - ERROR - Finnhub API request failed: 403 Client Error: Forbidden for url: https://finnhub.io/api/v1/stock/candle?symbol=NVDA&resolution=W&from=1709574655&to=1741110655&token=cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g
+2025-03-04 17:50:55,954 - WARNING - Generating dummy chart data for NVDA as fallback
+2025-03-04 17:50:55,956 - INFO - Loaded data rows: 262
+2025-03-04 17:50:56,046 - INFO - Chart update completed successfully
+2025-03-04 17:50:56,047 - INFO - Chart update method called successfully
+2025-03-04 17:51:15,507 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:51:15,507 - INFO - Using cached stock data for NVDA
+2025-03-04 17:51:45,508 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:51:45,508 - INFO - Using cached stock data for NVDA
+2025-03-04 17:52:15,537 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:52:15,538 - INFO - Using cached stock data for NVDA
+2025-03-04 17:52:45,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:52:45,540 - INFO - Using cached stock data for NVDA
+2025-03-04 17:53:25,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:53:25,540 - INFO - Using cached stock data for NVDA
+2025-03-04 17:54:05,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:54:05,540 - INFO - Using cached stock data for NVDA
+2025-03-04 17:54:35,541 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:54:35,541 - INFO - Using cached stock data for NVDA
+2025-03-04 17:55:15,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:55:15,540 - INFO - Making Finnhub request: https://finnhub.io/api/v1/quote with params {'symbol': 'NVDA', 'token': 'cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g'}
+2025-03-04 17:55:45,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:55:45,540 - INFO - Using cached stock data for NVDA
+2025-03-04 17:56:25,540 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:56:25,540 - INFO - Using cached stock data for NVDA
+2025-03-04 17:56:55,568 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:56:55,568 - INFO - Using cached stock data for NVDA
+2025-03-04 17:57:25,573 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:57:25,573 - INFO - Using cached stock data for NVDA
+2025-03-04 17:58:05,572 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:58:05,572 - INFO - Using cached stock data for NVDA
+2025-03-04 17:58:35,572 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:58:35,572 - INFO - Using cached stock data for NVDA
+2025-03-04 17:59:15,568 - INFO - Cache expired, refreshing stock data for NVDA
+2025-03-04 17:59:15,568 - INFO - Using cached stock data for NVDA
+2025-03-04 17:59:39,556 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-04 17:59:39,557 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-04 17:59:39,557 - INFO - API request queue shutdown complete, 0 requests remained in queue
+2025-03-04 17:59:39,557 - INFO - All API request queues have been shut down

@@ -5,6 +5,7 @@ import re
 import time
 import logging
 import traceback
+import fix_missing_methods
 
 # Set up exception handling to capture all errors
 def global_exception_handler(exctype, value, tb):
@@ -80,8 +81,19 @@ from widgets import ProfitTarget
 # Import our rate limiter system
 from rate_limiter import get_rate_limiter_stats, shutdown_all
 
+# Update imports to include the new ticker_utils module
+from ticker_utils import validate_ticker, normalize_ticker, find_similar_ticker
+import logging
+
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+
+# Import this at the top of the file with other imports
+import logging
+from types import MethodType
+
+# Import the formatter
+from ai_formatter import AnalysisFormatter
 
 class ModernStockApp(QMainWindow):
     def __init__(self):
@@ -172,6 +184,9 @@ class ModernStockApp(QMainWindow):
             self.last_stock_update = {}
             self.stock_cache_ttl = 30  # Cache data for 30 seconds
 
+            # Add a flag to prevent multiple simultaneous analyses
+            self.analysis_in_progress = False
+
         except Exception as e:
             # Log any initialization errors
             logging.critical(f"Initialization error: {str(e)}")
@@ -251,7 +266,7 @@ class ModernStockApp(QMainWindow):
         header = QWidget()
         header.setFixedHeight(60)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(24, 0, 12, 0)  # Reduced right margin
+        header_layout.setContentsMargins(24, 0, 24, 0)  # Added right padding for symmetry
         header_layout.setSpacing(0)  # Remove default spacing
 
         # Logo/Brand section (left side)
@@ -259,41 +274,88 @@ class ModernStockApp(QMainWindow):
         brand_label.setFont(QFont(FONT_FAMILY, 18, QFont.Bold))
         brand_label.setStyleSheet(f"color: {COLOR_PALETTES['Dark']['primary']};")
         
-        # Search container
+        # Add brand label
+        header_layout.addWidget(brand_label)
+        
+        # Add stretch to push everything else to the right
+        header_layout.addStretch(1)
+        
+        # Create a container for the home icon and search elements with zero spacing
+        control_container = QWidget()
+        control_layout = QHBoxLayout(control_container)
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.setSpacing(8)  # Small spacing between home icon and search
+        
+        # Home icon button - replaced text button with icon
+        self.btn_home = QPushButton()
+        self.btn_home.setFixedSize(32, 32)  # Square button for icon
+        
+        # Load home icon
+        home_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "home.png")
+        if os.path.exists(home_icon_path):
+            self.btn_home.setIcon(QIcon(home_icon_path))
+        else:
+            # Fallback if icon not found - use text "🏠" as unicode home symbol
+            self.btn_home.setText("🏠")
+            
+        self.btn_home.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 1px solid #333;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #2d2d2d;
+            }
+        """)
+        self.btn_home.setToolTip("Return to Home")
+        self.btn_home.hide()  # Hidden by default until needed
+        self.btn_home.clicked.connect(self._return_home)
+
+        # Create search container
         search_container = QWidget()
         search_layout = QHBoxLayout(search_container)
         search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(4)  # Small gap between search and button
-
-        # Search bar
+        search_layout.setSpacing(0)  # No spacing between search field and button
+        
+        # Search bar with styling
         self.search = QLineEdit()
         self.search.setPlaceholderText("Enter ticker...")
         self.search.setFixedWidth(150)
-        self.search.setFixedHeight(32)  # Match button height
+        self.search.setFixedHeight(32)
         self.search.setStyleSheet("""
             QLineEdit {
                 border: 1px solid #333;
-                border-radius: 4px;
+                border-right: none; /* Remove right border to connect with button */
+                border-top-left-radius: 4px;
+                border-bottom-left-radius: 4px;
+                border-top-right-radius: 0px;
+                border-bottom-right-radius: 0px;
                 padding: 0 10px;
+                margin: 0px; /* Ensure no margins */
                 background: #1a1a1a;
                 color: white;
             }
             QLineEdit:focus {
                 border-color: #00bcd4;
+                border-right: none; /* Keep right border removed even when focused */
             }
         """)
-        # Remove the textChanged connection to prevent automatic searching
-        # self.search.textChanged.connect(self._on_search_text_changed)
 
-        # Analyze button
+        # Analyze button with styling to connect with search bar
         self.btn_analyze = QPushButton("Analyze")
-        self.btn_analyze.setFixedSize(90, 32)  # Match search bar height
+        self.btn_analyze.setFixedSize(90, 32)
         self.btn_analyze.setStyleSheet("""
             QPushButton {
                 background-color: #00bcd4;
                 color: white;
                 border: none;
-                border-radius: 4px;
+                border-top-left-radius: 0px;
+                border-bottom-left-radius: 0px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+                margin: 0px; /* Ensure no margins */
+                padding: 0 10px;
             }
             QPushButton:hover {
                 background-color: #0097a7;
@@ -302,87 +364,119 @@ class ModernStockApp(QMainWindow):
                 background-color: #006064;
             }
         """)
-        self.btn_analyze.clicked.connect(self._analyze)  # Connect directly to analyze method
+        self.btn_analyze.clicked.connect(self._analyze)
 
-        # Home button
-        self.btn_home = QPushButton("Return Home")
-        self.btn_home.hide()
-        self.btn_home.setFixedHeight(32)  # Match other buttons
-        self.btn_home.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #858585;
-                border: 1px solid #333;
-                border-radius: 4px;
-                padding: 0 10px;
-            }
-            QPushButton:hover {
-                background-color: #2d2d2d;
-                color: white;
-            }
-        """)
-        self.btn_home.clicked.connect(self._return_home)
-
-        # Add widgets to layouts
+        # Add search and analyze button to search layout
         search_layout.addWidget(self.search)
         search_layout.addWidget(self.btn_analyze)
         
-        # Add all sections to header
-        header_layout.addWidget(brand_label)
-        header_layout.addStretch()
-        header_layout.addWidget(search_container)
-        header_layout.addSpacing(12)  # Space before home button
-        header_layout.addWidget(self.btn_home)
-
+        # Add home button and search container to control layout
+        control_layout.addWidget(self.btn_home)
+        control_layout.addWidget(search_container)
+        
+        # Add the control container to header layout
+        header_layout.addWidget(control_container)
+        
         parent_layout.addWidget(header)
 
     def _on_search_text_changed(self):
-        """DISABLED: This function previously triggered automatic search via debounce timer"""
-        # We're disabling the automatic search functionality
-        # The search will now only happen when Enter key is pressed or Analyze button is clicked
-        pass
-    
+        """Handle search text changes with debouncing to limit API calls"""
+        # Reset the debounce timer
+        if hasattr(self, 'search_debounce_timer'):
+            self.search_debounce_timer.stop()
+            # Only trigger after 500ms of inactivity
+            self.search_debounce_timer.start(500)
+
     def _check_analyze_ready(self):
         """DISABLED: This function previously triggered search after debounce timer expiration"""
         # We're disabling automatic search - do nothing when timer expires
         pass
 
-    def _connect_signals(self):
-        # Make sure we ONLY connect explicit search triggers
-        # Remove previous connections if they exist
-        try:
-            # Disconnect any previous connections to be safe
-            self.search.textChanged.disconnect()
-        except:
-            pass  # No signal was connected
+    def _debounced_search(self):
+        """Debounced function for search suggestions"""
+        # Get current search text
+        search_text = self.search.text().strip()
         
+        # Don't process very short inputs
+        if not search_text or len(search_text) < 2:
+            return
+        
+        # Check if this might be a valid ticker and suggest corrections
         try:
-            self.search.returnPressed.disconnect()
-        except:
-            pass  # No signal was connected
+            normalized = normalize_ticker(search_text)
+            # Only check for invalid tickers - don't validate with API yet
+            _, is_valid, suggestion = validate_ticker(normalized)
+            
+            if not is_valid and suggestion:
+                # Show suggestion in a non-intrusive way (status bar)
+                self.statusBar().showMessage(f"Did you mean {suggestion}?", 3000)
+        except Exception as e:
+            logging.debug(f"Error in search suggestion: {e}")
 
-        try:
-            self.btn_analyze.clicked.disconnect()
-        except:
-            pass  # No signal was connected
+    def _connect_signals(self):
+        """Connect all UI signals with proper error handling"""
+        # IMPORTANT: Use safe signal disconnect pattern
+        def safe_disconnect(obj, signal_name, slot=None):
+            """Safely disconnect a signal with proper error handling"""
+            try:
+                if hasattr(obj, signal_name):
+                    # Get the signal object
+                    signal = getattr(obj, signal_name)
+                    
+                    # Check if there are any connections
+                    if hasattr(signal, 'disconnect'):
+                        if slot is None:
+                            # Disconnect all connections if no specific slot provided
+                            signal.disconnect()
+                        else:
+                            # Disconnect specific slot
+                            signal.disconnect(slot)
+            except (TypeError, RuntimeError) as e:
+                # This is normal if the signal was not connected
+                logging.debug(f"Signal disconnect information: {e}")
+            except Exception as e:
+                # Log other errors but don't crash
+                logging.warning(f"Unexpected error during signal disconnect: {e}")
         
-        # Only connect Enter key and button click to trigger search
+        # Disconnect existing signals safely
+        safe_disconnect(self.search, 'returnPressed')
+        safe_disconnect(self.btn_analyze, 'clicked')
+        safe_disconnect(self.btn_home, 'clicked')
+        safe_disconnect(self.send_button, 'clicked')
+        safe_disconnect(self.search, 'textChanged')
+        
+        # Disconnect card signals
+        for card_name in ['strategy_card', 'news_card', 'long_term_card', 'day_trade_card']:
+            if hasattr(self, card_name):
+                card = getattr(self, card_name)
+                if hasattr(card, 'maximize_signal'):
+                    safe_disconnect(card, 'maximize_signal')
+        
+        # Now connect signals once
         self.search.returnPressed.connect(self._analyze)
         self.btn_analyze.clicked.connect(self._analyze)
-        
-        # Connect other signals
         self.btn_home.clicked.connect(self._return_home)
-        self.strategy_card.maximize_signal.connect(self._show_maximized_card)
-        self.news_card.maximize_signal.connect(self._show_maximized_card)
-        self.long_term_card.maximize_signal.connect(self._show_maximized_card)
-        self.day_trade_card.maximize_signal.connect(self._show_maximized_card)
+        
+        # Connect card signals with existence checks
+        if hasattr(self, 'strategy_card'):
+            self.strategy_card.maximize_signal.connect(self._show_maximized_card)
+        if hasattr(self, 'news_card'):
+            self.news_card.maximize_signal.connect(self._show_maximized_card)
+        if hasattr(self, 'long_term_card'):
+            self.long_term_card.maximize_signal.connect(self._show_maximized_card)
+        if hasattr(self, 'day_trade_card'):
+            self.day_trade_card.maximize_signal.connect(self._show_maximized_card)
+        
         self.send_button.clicked.connect(self._send_chat_message)
         
-        # Do NOT reconnect the textChanged signal to _on_search_text_changed
+        # Connect text change handler with debouncing
+        self.search.textChanged.connect(self._on_search_text_changed)
         
-        # Stop the debounce timer if it's running to prevent any unwanted triggers
-        if hasattr(self, 'debounce_timer') and self.debounce_timer.isActive():
-            self.debounce_timer.stop()
+        # Set up debounce timer if not already
+        if not hasattr(self, 'search_debounce_timer'):
+            self.search_debounce_timer = QTimer(self)
+            self.search_debounce_timer.setSingleShot(True)
+            self.search_debounce_timer.timeout.connect(self._debounced_search)
 
     def _create_home_page(self):
         home_page = QWidget()
@@ -390,8 +484,6 @@ class ModernStockApp(QMainWindow):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
-        # Remove the search section from home page since it's now in the header
-        
         # Market News Section
         news_label = QLabel("Market News")
         news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
@@ -402,19 +494,27 @@ class ModernStockApp(QMainWindow):
         self.news_feed.setMaximumHeight(200)
         layout.addWidget(self.news_feed)
 
-        # Recently Viewed Section
+        # Recently Viewed Section - Redesigned without grey background
         recent_label = QLabel("Recently Viewed")
         recent_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        recent_label.setStyleSheet("margin-top: 10px;")  # Add some margin above
         layout.addWidget(recent_label)
 
-        self.recent_scroll = QScrollArea()
-        self.recent_scroll.setWidgetResizable(True)
-        self.recent_content = QWidget()
-        self.recent_layout = QHBoxLayout(self.recent_content)
-        self.recent_layout.setSpacing(10)
-        self.recent_scroll.setWidget(self.recent_content)
-        self.recent_scroll.setMaximumHeight(150)
-        layout.addWidget(self.recent_scroll)
+        # Create a simple container without scroll area
+        recent_container = QWidget()
+        recent_container.setMaximumHeight(100)  # Reduced height from 150 to 100
+        
+        # Use a flow layout (horizontal with wrapping) for the cards
+        self.recent_layout = QHBoxLayout(recent_container)
+        self.recent_layout.setContentsMargins(0, 0, 0, 0)  # No margins
+        self.recent_layout.setSpacing(10)  # Space between cards
+        self.recent_layout.setAlignment(Qt.AlignLeft)  # Align left
+        
+        # Add the container directly to main layout
+        layout.addWidget(recent_container)
+        
+        # Store reference to container for updates
+        self.recent_content = recent_container
 
         # Market Analysis Section
         market_analysis_label = QLabel("Market Analysis")
@@ -534,6 +634,12 @@ class ModernStockApp(QMainWindow):
             card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             layout.addWidget(card)
 
+        # Set initial content with HTML formatting
+        self.news_card.content.setHtml("<i>Search for a stock to view news...</i>")
+        self.long_term_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
+        self.day_trade_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
+        self.strategy_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
+
         layout.addStretch()  # Add stretch at the bottom to prevent unnecessary expansion
         scroll.setWidget(content)
         
@@ -599,11 +705,13 @@ class ModernStockApp(QMainWindow):
                 
                 # Use a try-except block to catch specific errors
                 try:
+                    # Update the chart in one place only
                     self.chart.update_chart(
                         self.current_ticker,
                         time_frame,
                         chart_type
                     )
+                    logging.info("Chart update method called successfully")
                 except Exception as chart_error:
                     logging.error(f"Chart update_chart method failed: {chart_error}")
                     # Try a fallback approach
@@ -613,20 +721,20 @@ class ModernStockApp(QMainWindow):
                         color=(255, 0, 0)
                     ))
                 
-                logging.info("Chart update method called successfully")
             except Exception as e:
                 logging.error(f"Error in _update_chart outer block: {e}")
                 # Don't show error message here as it might cause recursive issues
 
     def _create_stock_card(self, ticker, current_price, prev_close, container_layout):
-        """Create a stock card for either favorites or recently viewed"""
+        """Create a stock card for recently viewed stocks"""
         try:
-            # Create stock card
+            # Create stock card with more minimalist design
             card = QFrame()
-            card.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-            card.setLineWidth(1)
+            card.setFrameStyle(QFrame.NoFrame)  # No frame border
+            card.setLineWidth(0)
             card_layout = QVBoxLayout(card)
-
+            card_layout.setContentsMargins(8, 8, 8, 8)  # Smaller internal padding
+            
             # Ticker label
             ticker_label = QLabel(ticker)
             ticker_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
@@ -637,19 +745,19 @@ class ModernStockApp(QMainWindow):
             price_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
             price_label.setAlignment(Qt.AlignCenter)
 
-            # Set color based on trend
+            # Set color based on trend (more subtle background)
             if current_price > prev_close:
-                card.setStyleSheet("background-color: #1e3320; color: white;")
+                card.setStyleSheet("background-color: rgba(30, 51, 32, 0.7); color: white; border-radius: 6px;")
             elif current_price < prev_close:
-                card.setStyleSheet("background-color: #3d1f1f; color: white;")
+                card.setStyleSheet("background-color: rgba(61, 31, 31, 0.7); color: white; border-radius: 6px;")
             else:
-                card.setStyleSheet("background-color: #2d2d2d; color: white;")
+                card.setStyleSheet("background-color: rgba(45, 45, 45, 0.7); color: white; border-radius: 6px;")
 
             card_layout.addWidget(ticker_label)
             card_layout.addWidget(price_label)
             
-            # Set fixed size for the card
-            card.setFixedSize(120, 80)
+            # Set fixed size for the card - smaller than before
+            card.setFixedSize(100, 70)
             container_layout.addWidget(card)
 
         except Exception as e:
@@ -661,7 +769,15 @@ class ModernStockApp(QMainWindow):
             widget = self.recent_layout.itemAt(i).widget()
             if widget:
                 widget.deleteLater()
+        
+        if not self.recent_tickers:
+            # Add a placeholder message if no recent tickers
+            placeholder = QLabel("No recently viewed stocks. Search for a ticker to begin.")
+            placeholder.setStyleSheet("color: #757575; font-style: italic;")
+            self.recent_layout.addWidget(placeholder)
+            return
 
+        # Add recent ticker cards
         for ticker in self.recent_tickers:
             try:
                 stock_data = self.stock_api.get_stock(ticker)
@@ -674,6 +790,9 @@ class ModernStockApp(QMainWindow):
             except Exception as e:
                 print(f"Error loading recent stock {ticker}: {e}")
             time.sleep(1)  # Add delay between requests
+        
+        # Add stretch to push cards to the left
+        self.recent_layout.addStretch()
 
     def _load_market_analysis(self):
         prompt = """
@@ -728,30 +847,56 @@ class ModernStockApp(QMainWindow):
             self.market_analysis.setPlainText(f"Error generating market analysis: {str(e)}")
 
     def _analyze(self):
-        ticker = self.search.text().strip().upper()
-
-        if not ticker:
-            self._show_error("Please enter a stock ticker")
+        # Prevent multiple simultaneous analyses
+        if self.analysis_in_progress:
+            logging.info("Analysis already in progress, ignoring duplicate request")
             return
             
+        raw_ticker = self.search.text().strip().upper()
+
+        if not raw_ticker:
+            self._show_error("Please enter a stock ticker")
+            return
+        
+        # Add ticker validation and normalization
+        ticker, is_valid, suggestion = validate_ticker(raw_ticker)
+        
+        # Handle invalid ticker with suggestion if available
+        if not is_valid:
+            suggestion_msg = f" Did you mean {suggestion}?" if suggestion else ""
+            self._show_error(f"Invalid ticker symbol: {raw_ticker}.{suggestion_msg}")
+            return
+            
+        # Set the flag to prevent duplicate processing
+        self.analysis_in_progress = True
+        
         # Show loading indicator
-        self.statusBar().showMessage("Loading data and generating analysis...")
+        self.statusBar().showMessage(f"Loading data and generating analysis for {ticker}...")
         QApplication.processEvents()
 
         try:
+            # Update current_ticker ONLY after validation
             self.current_ticker = ticker
             
-            # Update recent tickers list
+            # Update recent tickers list with validated ticker
             if (ticker in self.recent_tickers):
                 self.recent_tickers.remove(ticker)
             self.recent_tickers.insert(0, ticker)
             self.recent_tickers = self.recent_tickers[:self.max_recent_tickers]
             self._load_recent_tickers()
             
-            # Get stock data first and store in cache
-            stock = self.stock_api.get_stock(ticker)
-            self.stock_data_cache[ticker] = stock
-            self.last_stock_update[ticker] = time.time()
+            # Clear cache for previous searches that aren't the current ticker
+            # This ensures we don't reuse cached data from different symbols
+            self._clear_irrelevant_cache(ticker)
+            
+            # Get stock data first and store in cache with properly namespaced key
+            logging.info(f"Requesting fresh data for ticker: {ticker}")
+            stock = self.stock_api.get_stock(ticker, use_cache=False)  # Force fresh data for new searches
+            
+            # Store in cache with proper cache key that includes the ticker
+            cache_key = f"stock_data_{ticker}"
+            self.stock_data_cache[cache_key] = stock
+            self.last_stock_update[cache_key] = time.time()
             
             # Switch to analysis page
             self.stacked_widget.setCurrentIndex(1)
@@ -771,12 +916,11 @@ class ModernStockApp(QMainWindow):
             QApplication.processEvents()
             self._update_news(ticker)
             
-            # Update chart (also doesn't use LLM)
+            # Update chart
             QApplication.processEvents()
             self._update_chart()
-            self.chart.update_chart(ticker)
             
-            # Now generate the AI analysis (most likely to hit rate limits)
+            # Generate the AI analysis
             try:
                 self._generate_combined_analysis(stock)
             except Exception as e:
@@ -788,37 +932,73 @@ class ModernStockApp(QMainWindow):
             self.statusBar().showMessage(f"Analysis of {ticker} complete", 3000)
 
         except StockAPIError as e:
-            logging.error(f"Error analyzing stock: {e}")
+            logging.error(f"Error analyzing stock {ticker}: {e}")
             self.statusBar().showMessage("Analysis failed", 3000)
             self._show_error(str(e))
         except Exception as e:
-            logging.error(f"Unexpected error during analysis: {e}")
+            logging.error(f"Unexpected error during analysis of {ticker}: {e}")
             self.statusBar().showMessage("Analysis failed", 3000)
             self._show_error(f"An unexpected error occurred: {str(e)}")
+        finally:
+            # Always reset the flag when done
+            self.analysis_in_progress = False
+
+    def _clear_irrelevant_cache(self, current_ticker):
+        """Clear cache entries that aren't related to the current ticker to avoid using wrong data"""
+        # Define patterns for ticker-specific cache keys
+        patterns = [
+            f"stock_data_",  # Stock data cache
+            f"chart_",       # Chart data cache
+            f"news_"         # News cache
+        ]
+        
+        # Collect keys to delete (to avoid modifying dict during iteration)
+        keys_to_delete = []
+        
+        # Check stock data cache
+        for cache_key in self.stock_data_cache.keys():
+            # Only keep cache entries related to current ticker
+            if not any(p + current_ticker in cache_key for p in patterns):
+                keys_to_delete.append(cache_key)
+        
+        # Delete keys
+        for key in keys_to_delete:
+            logging.info(f"Clearing cache entry: {key}")
+            if key in self.stock_data_cache:
+                del self.stock_data_cache[key]
+            if key in self.last_stock_update:
+                del self.last_stock_update[key]
 
     def _update_ui(self):
         if not self.current_ticker:
             return
 
         try:
+            # Show loading indicators
+            if hasattr(self, 'overview') and hasattr(self.overview, 'show_loading'):
+                self.overview.show_loading()
+            
             current_time = time.time()
             refresh_needed = False
             
+            # Use proper cache key that includes ticker
+            cache_key = f"stock_data_{self.current_ticker}"
+            
             # Check if stock data needs to be refreshed
-            if (self.current_ticker not in self.stock_data_cache or
-                self.current_ticker not in self.last_stock_update or
-                (current_time - self.last_stock_update[self.current_ticker]) > self.stock_cache_ttl):
+            if (cache_key not in self.stock_data_cache or
+                cache_key not in self.last_stock_update or
+                (current_time - self.last_stock_update[cache_key]) > self.stock_cache_ttl):
                 
                 # Only make API call when cache is expired
-                logging.info(f"Cache expired, refreshing stock data for {self.current_ticker}")
+                logging.info(f"Cache expired or not found for {self.current_ticker}, refreshing stock data")
                 stock_data = self.stock_api.get_stock(self.current_ticker)
-                self.stock_data_cache[self.current_ticker] = stock_data
-                self.last_stock_update[self.current_ticker] = current_time
+                self.stock_data_cache[cache_key] = stock_data
+                self.last_stock_update[cache_key] = current_time
                 refresh_needed = True
             else:
                 # Use cached data
-                stock_data = self.stock_data_cache[self.current_ticker]
-                logging.debug(f"Using cached stock data for {self.current_ticker}")
+                stock_data = self.stock_data_cache[cache_key]
+                logging.debug(f"Using cached stock data for {self.current_ticker} from key: {cache_key}")
             
             # Only update UI elements if data was refreshed or this is the first update cycle
             if refresh_needed or not hasattr(self, '_ui_updated'):
@@ -848,76 +1028,89 @@ class ModernStockApp(QMainWindow):
                 self._ui_updated = True
 
         except StockAPIError as e:
-            logging.error(f"Error updating UI: {e}")
+            logging.error(f"Error updating UI for {self.current_ticker}: {e}")
             self._show_error(str(e))
         except Exception as e:
-            logging.error(f"Unexpected error during UI update: {e}")
+            logging.error(f"Unexpected error during UI update for {self.current_ticker}: {e}")
             self._show_error(f"An unexpected error occurred: {str(e)}")
 
-    def _get_stock_metrics(self, stock_data):
-        metrics = {}
-        # Ensure values are float64 and handle missing keys - add more price metrics
-        metrics['Current Price'] = np.float64(stock_data.get('c', 0) or 0)
-        metrics['Previous Close'] = np.float64(stock_data.get('pc', 0) or 0)
-        metrics['Day High'] = np.float64(stock_data.get('h', 0) or 0)
-        metrics['Day Low'] = np.float64(stock_data.get('l', 0) or 0)
-        metrics['Open'] = np.float64(stock_data.get('o', 0) or 0)
+    def _format_news_html(self, news_items):
+        """Format news items as HTML for better presentation"""
+        if not news_items:
+            return "<i>No news available.</i>"
+            
+        html = "<div style='font-family: Segoe UI, sans-serif;'>"
         
-        # Calculate percent change
-        if metrics['Previous Close'] > 0:
-            change_pct = ((metrics['Current Price'] - metrics['Previous Close']) / 
-                         metrics['Previous Close']) * 100
-            metrics['Change %'] = np.float64(change_pct)
+        for article in news_items:
+            # Extract article data
+            title = article.get('title', 'No Title')
+            description = article.get('description', 'No description available.')
+            source = article.get('source', {}).get('name', 'Unknown Source')
+            date = article.get('formatted_date', article.get('publishedAt', ''))[:10]
+            url = article.get('url', '#')
+            
+            # Format as a nice HTML card
+            html += f"""
+            <div style='margin-bottom: 15px; padding: 10px; border-left: 3px solid #00bcd4; background-color: #1a1a1a;'>
+                <h3 style='margin-top: 0; margin-bottom: 5px; color: #e0e0e0;'>{title}</h3>
+                <div style='font-size: 12px; color: #757575; margin-bottom: 8px;'>
+                    {source} • {date}
+                </div>
+                <p style='margin-bottom: 5px; color: #bdbdbd;'>{description}</p>
+            </div>
+            """
         
-        # Keep original metrics
-        metrics['pe_ratio'] = np.float64(stock_data.get('pe', 0) or 0)
-        metrics['dividend_yield'] = np.float64(stock_data.get('dy', 0) or 0)
-        metrics['market_cap'] = np.float64(stock_data.get('marketCapitalization', 0) or 0)
-        metrics['volume'] = np.float64(stock_data.get('v', 0) or 0)
-        return metrics
+        html += "</div>"
+        return html
 
     def _update_news(self, ticker):
         try:
+            # Show loading state
+            self.news_card.show_loading()
+            QApplication.processEvents()
+            
+            # Get news with proper error handling
             news = self.stock_api.get_news(ticker)
-            news_text = ""
-            for i, article in enumerate(news[:3]):
-                try:
-                    title = article.get('title', 'No Title')
-                    description = article.get('description', 'No Description')
-                    news_text += f"{title}\n{description}\n\n"
-                except Exception as e:
-                    logging.warning(f"Error processing article {i}: {e}")
-                    news_text += f"Error processing article {i}: {str(e)}\n\n"
-            self.news_card.content.setPlainText(news_text)
+            
+            # Format news as HTML and update the card
+            html_content = self._format_news_html(news)
+            self.news_card.content.setHtml(html_content)
+            
         except Exception as e:
             logging.error(f"Error updating news: {e}")
-            self.news_card.content.setPlainText(f"News error: {str(e)}")
+            self.news_card.content.setHtml(
+                f"<div style='color: #F44336;'>Error loading news: {str(e)}</div>"
+            )
 
     def _generate_combined_analysis(self, stock):
         try:
-            self.long_term_card.content.setPlainText("Loading analysis...")
-            self.day_trade_card.content.setPlainText("Loading analysis...")
-            self.strategy_card.content.setPlainText("Loading analysis...")
+            # Show loading state
+            self.long_term_card.content.setHtml("<i>Loading analysis...</i>")
+            self.day_trade_card.content.setHtml("<i>Loading analysis...</i>")
+            self.strategy_card.content.setHtml("<i>Loading analysis...</i>")
             QApplication.processEvents()
-
+            
+            # Create clear sections in the prompt
             combined_prompt = f"""
             Analyze the long-term investment potential of {self.current_ticker}:
             - Current stock price: ${stock['c']}
             - Investment amount: $10000
             - Investment timeframe: 30 days
-            Provide a detailed analysis covering potential growth factors, risks, and a final investment recommendation.
-            Also, provide a buy, hold, and sell suggestion.
-            
-            Then, provide a day trading analysis:
-            Focus on potential entry and exit points, technical indicators, and risk management strategies.
-            
-            Finally, create a step-by-step investment strategy including:
-            1. Entry price point
-            2. How long to hold
-            3. Target price
-            4. When to reinvest
-            5. Stop loss recommendation
+
+            Provide a detailed analysis covering potential growth factors, risks, and investment recommendations.
+            Structure your response with clear sections:
+
+            LONG-TERM ANALYSIS:
+            [Your long-term analysis here, including bullet points for key factors]
+
+            DAY TRADING STRATEGY:
+            [Day trading analysis with technical indicators and entry/exit points]
+
+            INVESTMENT RECOMMENDATION:
+            [Clear step-by-step investment strategy with price targets]
             """
+
+            # Generate analysis
             response = self.ai_client.analyze(
                 combined_prompt, 
                 "financial analyst", 
@@ -925,25 +1118,57 @@ class ModernStockApp(QMainWindow):
                 retries=3, 
                 backoff_factor=2.0
             )
+            
             content = response['message']['content']
             cleaned_content = remove_think_tags(content)
                 
-            # Split the analysis based on headers or sections
+            # Split the analysis based on headers
             try:
-                parts = re.split(r'\n\s*(?:Day Trading Analysis|Investment Strategy|Step-by-step Investment Strategy):', cleaned_content)
-                if len(parts) >= 3:
-                    self.long_term_card.content.setPlainText(parts[0].strip())
-                    self.day_trade_card.content.setPlainText(parts[1].strip())
-                    self.strategy_card.content.setPlainText(parts[2].strip())
+                # Use regex to split on section headers
+                sections = re.split(r'(?:^|\n)\s*(LONG-TERM ANALYSIS:|DAY TRADING STRATEGY:|INVESTMENT RECOMMENDATION:)\s*(?:\n|$)', 
+                                cleaned_content, flags=re.IGNORECASE)
+                
+                # Process the sections if we found them
+                if len(sections) >= 4:  # The first element is empty if the split was at the start
+                    long_term = sections[2] if sections[1].strip().upper() == "LONG-TERM ANALYSIS:" else ""
+                    day_trading = sections[4] if len(sections) > 4 and sections[3].strip().upper() == "DAY TRADING STRATEGY:" else ""
+                    investment = sections[6] if len(sections) > 6 and sections[5].strip().upper() == "INVESTMENT RECOMMENDATION:" else ""
+                    
+                    # Apply rich formatting to each section
+                    if long_term:
+                        AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term, self.current_ticker)
+                    else:
+                        self.long_term_card.content.setPlainText("Could not extract long-term analysis.")
+                    
+                    if day_trading:
+                        AnalysisFormatter.apply_formatting_to_textedit(self.day_trade_card.content, day_trading, self.current_ticker)
+                    else:
+                        self.day_trade_card.content.setPlainText("Could not extract day trading strategy.")
+                    
+                    if investment:
+                        AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment, self.current_ticker)
+                    else:
+                        self.strategy_card.content.setPlainText("Could not extract investment recommendation.")
+                        
+                    # Update recommendations based on the first section
+                    self._update_recommendations(long_term)
                 else:
+                    # Fallback to simpler division if regex doesn't work
                     sections = cleaned_content.split("\n\n")
                     third = len(sections) // 3
-                    self.long_term_card.content.setPlainText("\n\n".join(sections[:third]))
-                    self.day_trade_card.content.setPlainText("\n\n".join(sections[third:2*third]))
-                    self.strategy_card.content.setPlainText("\n\n".join(sections[2*third:]))
-                self._update_recommendations(parts[0] if len(parts) >= 3 else "\n\n".join(sections[:third]))
+                    
+                    long_term_text = "\n\n".join(sections[:third])
+                    day_trading_text = "\n\n".join(sections[third:2*third])
+                    investment_text = "\n\n".join(sections[2*third:])
+                    
+                    AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term_text, self.current_ticker)
+                    AnalysisFormatter.apply_formatting_to_textedit(self.day_trade_card.content, day_trading_text, self.current_ticker)
+                    AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment_text, self.current_ticker)
+                    
+                    self._update_recommendations(long_term_text)
             except Exception as e:
                 logging.error(f"Error splitting analysis content: {e}")
+                # If formatting fails, fall back to plain text
                 self.long_term_card.content.setPlainText(cleaned_content)
                 self.day_trade_card.content.setPlainText("Error splitting analysis.")
                 self.strategy_card.content.setPlainText("Error splitting analysis.")
@@ -957,27 +1182,6 @@ class ModernStockApp(QMainWindow):
     def _update_recommendations(self, analysis_text):
         recs = parse_recommendations(analysis_text)
         self.ai_recommendation.update_recommendations(recs)
-
-    def _connect_signals(self):
-        self.search.returnPressed.connect(self._analyze)
-        self.btn_analyze.clicked.connect(self._analyze)
-        self.btn_home.clicked.connect(self._return_home)
-        self.strategy_card.maximize_signal.connect(self._show_maximized_card)
-        self.news_card.maximize_signal.connect(self._show_maximized_card)
-        self.long_term_card.maximize_signal.connect(self._show_maximized_card)
-        self.day_trade_card.maximize_signal.connect(self._show_maximized_card)
-        self.send_button.clicked.connect(self._send_chat_message)
-        # Make sure we're not connecting the search text changed signal elsewhere
-        # Disconnect first (in case it was connected multiple times)
-        try:
-            self.search.textChanged.disconnect(self._on_search_text_changed)
-        except:
-            pass  # No signal was connected
-        self.search.textChanged.connect(self._on_search_text_changed)
-        
-        # Ensure Return/Enter and button click will always trigger analyze directly
-        self.search.returnPressed.connect(self._analyze)
-        self.btn_analyze.clicked.connect(self._analyze)
 
     def _return_home(self):
         self.stacked_widget.setCurrentIndex(0)
@@ -998,6 +1202,7 @@ class ModernStockApp(QMainWindow):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok)
         buttons.accepted.connect(dialog.accept)
         layout.addWidget(buttons)
+        
         dialog.exec()
 
     def _show_error(self, message):
@@ -1034,7 +1239,6 @@ class ModernStockApp(QMainWindow):
             prompt = f"""
             Context about {self.current_ticker}:
             {context}
-            
             User Question: {user_message}
             
             Please provide a helpful answer using the context provided.
@@ -1203,13 +1407,12 @@ class ModernStockApp(QMainWindow):
             self.rate_limit_timer.stop()
         if hasattr(self, 'request_timer'):
             self.request_timer.stop()
-            
         # Shut down all request queues
         try:
             shutdown_all()
         except Exception as e:
             logging.error(f"Error shutting down API queues: {e}")
-            
+        
         event.accept()
 
     def _load_news_feed(self):
@@ -1277,12 +1480,36 @@ class ModernStockApp(QMainWindow):
                     news_text += f"[{date}] {title}\n"
                     news_text += f"Source: {source}\n"
                     news_text += f"{description}\n\n"
-                
+                            
                 self.news_feed.setPlainText(news_text)
         
         except Exception as e:
             logging.error(f"Error in news feed function: {e}")
             self.news_feed.setPlainText(f"Unable to load news: {str(e)}")
+
+    def _get_stock_metrics(self, ticker):
+        """Get financial metrics for a stock"""
+        try:
+            if not hasattr(self, 'stock_api') or not self.stock_api:
+                logging.error("Stock API not initialized!")
+                raise ValueError("Stock API not initialized")
+            
+            return self.stock_api.get_financial_metrics(ticker)
+        except Exception as e:
+            logging.error(f"Error fetching stock metrics for {ticker}: {e}")
+            
+            # Return fallback data structure
+            return {
+                "metric": {
+                    "peNormalizedAnnual": None,
+                    "peTTM": None,
+                    "pbAnnual": None,
+                    "psTTM": None,
+                    "dividendYieldIndicatedAnnual": None,
+                    "52WeekHigh": None,
+                    "52WeekLow": None
+                }
+            }
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

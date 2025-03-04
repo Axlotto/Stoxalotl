@@ -1,84 +1,63 @@
 # helpers.py
 import re
 from config import COLOR_PALETTES, FONT_FAMILY, FONT_SIZES
+from ticker_utils import (
+    validate_ticker, 
+    normalize_ticker, 
+    find_similar_ticker as find_closest_ticker,
+    get_levenshtein_distance
+)
+from ticker_utils import COMMON_MISSPELLINGS as COMMON_TICKER_CORRECTIONS
 
 def parse_recommendations(text):
-    """
-    Parse recommendation percentages from analysis text.
+    """Extract recommendation points from analysis text"""
+    import re
     
-    Args:
-        text (str): Raw analysis text containing recommendations
-        
-    Returns:
-        dict: Dictionary with Buy/Hold/Sell percentages
-    """
-    recs = {}
-    try:
-        if not text:
-            return {'Buy': 'N/A', 'Hold': 'N/A', 'Sell': 'N/A'}
-        
-        # Look for patterns like "Buy: 65%", "Hold: 25%", etc.
-        matches = re.findall(
-            r'(Buy|Hold|Sell)\s*:\s*(\d+)%', 
-            text, 
-            flags=re.IGNORECASE
-        )
-        
-        for match in matches:
-            option = match[0].capitalize()
-            percent = int(match[1])
-            recs[option] = percent
-            
-        # Ensure all keys exist
-        for option in ['Buy', 'Hold', 'Sell']:
-            if option not in recs:
-                recs[option] = 'N/A'
-                
-    except Exception as e:
-        print(f"Error parsing recommendations: {e}")
-        return {'Buy': 'N/A', 'Hold': 'N/A', 'Sell': 'N/A'}
+    # Look for bullet points or numbered lists
+    bullet_pattern = r'(?:^|\n)[\s]*[-•*][\s]+(.*?)(?=$|\n)'
+    numbered_pattern = r'(?:^|\n)[\s]*\d+\.[\s]+(.*?)(?=$|\n)'
     
-    return recs
+    bullet_points = re.findall(bullet_pattern, text, re.MULTILINE)
+    numbered_points = re.findall(numbered_pattern, text, re.MULTILINE)
+    
+    # Combine and limit to 5 points
+    points = (bullet_points + numbered_points)[:5]
+    
+    # If we didn't find explicit bullet points, try to extract sentences with key terms
+    if not points:
+        key_terms = ["recommend", "consider", "suggest", "look for", "watch", "buy", "sell", "hold"]
+        sentence_pattern = r'[^.!?]*(?:{})[^.!?]*[.!?]'.format('|'.join(key_terms))
+        sentences = re.findall(sentence_pattern, text, re.IGNORECASE)
+        points = [s.strip() for s in sentences[:5]]
+    
+    # If we still have nothing, just take the first few sentences
+    if not points:
+        sentences = re.split(r'[.!?]', text)
+        points = [s.strip() for s in sentences[:5] if len(s.strip()) > 20]
+    
+    return points
 
 def analysis_color(text, theme="Dark"):
-    """
-    Determine color based on analysis verdict, using the specified theme.
+    """Determine sentiment color based on text content"""
+    text = text.lower()
     
-    Args:
-        text (str): Analysis text
-        theme (str): Theme name from COLOR_PALETTES (default: "Dark")
-        
-    Returns:
-        str: Color code from config.COLOR_PALETTES
-    """
-    colors = COLOR_PALETTES.get(theme, COLOR_PALETTES["Dark"])  # Get theme colors, default to "Dark"
+    positive_words = ["buy", "positive", "bullish", "uptrend", "growth", "opportunity"]
+    negative_words = ["sell", "negative", "bearish", "downtrend", "caution", "risk"]
     
-    if not text:
-        return colors['text']
+    positive_count = sum(1 for word in positive_words if word in text)
+    negative_count = sum(1 for word in negative_words if word in text)
     
-    text_lower = text.lower()
-    
-    if 'verdict: buy' in text_lower:
-        return colors['positive']
-    elif 'verdict: sell' in text_lower:
-        return colors['negative']
-    elif 'buy' in text_lower:
-        return "#90EE90"  # Light green
-    elif 'sell' in text_lower:
-        return "#FF6961"  # Light red
-    return colors['text']
+    if positive_count > negative_count:
+        return "#4CAF50"  # Green
+    elif negative_count > positive_count:
+        return "#F44336"  # Red
+    else:
+        return "#FFD700"  # Yellow/gold for neutral
 
 def remove_think_tags(text):
-    """
-    Remove content between <think> tags from text.
-    
-    Args:
-        text (str): Original text with potential <think> tags
-        
-    Returns:
-        str: Cleaned text without think tags
-    """
-    return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    """Remove <thinking> tags from text"""
+    import re
+    return re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
 
 def format_price(value):
     """
@@ -114,17 +93,54 @@ def get_change_color(current, previous, theme="Dark"):
     except (ValueError, TypeError):
         return colors['text']
 
-def format_percentage(value):
-    """
-    Format numeric value as percentage string.
+def format_percentage(value, decimal_places=2):
+    """Format a decimal value as percentage"""
+    if value is None:
+        return "--"
     
-    Args:
-        value (float): Numeric percentage value
-        
-    Returns:
-        str: Formatted percentage string (XX.XX%)
-    """
     try:
-        return f"{float(value) * 100:.2f}%"
+        value = float(value)
+        # Convert to percentage (multiply by 100)
+        percentage = value * 100
+        return f"{percentage:.{decimal_places}f}%"
     except (ValueError, TypeError):
-        return "N/A"
+        return str(value)
+
+def format_number(value, decimal_places=2, use_commas=True):
+    """Format a number with commas for thousands and specified decimal places"""
+    if value is None:
+        return "--"
+    
+    try:
+        value = float(value)
+        formatted = f"{value:,.{decimal_places}f}" if use_commas else f"{value:.{decimal_places}f}"
+        return formatted
+    except (ValueError, TypeError):
+        return str(value)
+
+def format_market_cap(value):
+    """Format market cap in billions or trillions"""
+    if value is None:
+        return "--"
+    
+    try:
+        value = float(value)
+        if value >= 1_000_000:  # Trillion+
+            return f"${value/1_000_000:.1f}T"
+        elif value >= 1_000:  # Billion+
+            return f"${value/1_000:.1f}B"
+        else:  # Million
+            return f"${value:.0f}M"
+    except (ValueError, TypeError):
+        return str(value)
+
+def format_currency(value, decimal_places=2):
+    """Format a number as currency with $ symbol"""
+    if value is None:
+        return "--"
+    
+    try:
+        value = float(value)
+        return f"${value:,.{decimal_places}f}"
+    except (ValueError, TypeError):
+        return str(value)

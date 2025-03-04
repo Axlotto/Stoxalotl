@@ -198,3 +198,65 @@ def get_fallback_chart_data(ticker, time_period="3M"):
         'Close': closes,
         'Volume': volumes
     }, index=pd.DatetimeIndex(dates))
+
+def get_fallback_stock_metrics(ticker):
+    """
+    Generate fallback financial metrics when API calls fail
+    """
+    logging.info(f"Using fallback metrics data for {ticker}")
+    
+    # Use ticker to seed random generator for consistent results
+    seed = sum(ord(c) for c in ticker)
+    np.random.seed(seed)
+    
+    # Generate metrics based on ticker to maintain consistency
+    pe_range = (10, 40)
+    pb_range = (1, 8)
+    ps_range = (1, 15)
+    div_range = (0, 5)
+    
+    # Get base randomizers based on ticker
+    ticker_val = seed % 100 / 100
+    
+    # Calculate values
+    pe_ratio = pe_range[0] + ticker_val * (pe_range[1] - pe_range[0])
+    pe_ratio = pe_ratio * (1 + np.random.normal(0, 0.1))  # Add some noise
+    
+    pb_ratio = pb_range[0] + ticker_val * (pb_range[1] - pb_range[0])
+    pb_ratio = pb_ratio * (1 + np.random.normal(0, 0.1))
+    
+    ps_ratio = ps_range[0] + ticker_val * (ps_range[1] - ps_range[0])
+    ps_ratio = ps_ratio * (1 + np.random.normal(0, 0.1))
+    
+    # Dividend yield tends to be inversely related to PE ratio
+    div_yield = div_range[0] + (1 - ticker_val) * (div_range[1] - div_range[0])
+    div_yield = max(0, div_yield * (1 + np.random.normal(0, 0.2)))
+    
+    # Get a base price from the ticker
+    base_price = 50 + (seed % 450)  # $50-$500
+    
+    # 52-week high is above base price
+    high_52w = base_price * (1 + 0.1 + 0.4 * ticker_val)
+    
+    # 52-week low is below base price
+    low_52w = base_price * (1 - 0.05 - 0.3 * ticker_val)
+    
+    # Reset random seed
+    np.random.seed(None)
+    
+    # Return metrics in Finnhub format
+    return {
+        "metric": {
+            "peNormalizedAnnual": round(pe_ratio, 2),
+            "peTTM": round(pe_ratio * (1 + np.random.normal(0, 0.05)), 2),  # Slightly different from normalized
+            "pbAnnual": round(pb_ratio, 2),
+            "psTTM": round(ps_ratio, 2), 
+            "dividendYieldIndicatedAnnual": round(div_yield, 2),
+            "52WeekHigh": round(high_52w, 2),
+            "52WeekLow": round(low_52w, 2),
+            "currentEv/freeCashFlowTTM": round(10 + np.random.normal(15, 5), 2),
+            "epsGrowth3Y": round(np.random.normal(10, 5), 2),
+            "revenueGrowth3Y": round(np.random.normal(8, 4), 2),
+            "grossMargin5Y": round(30 + np.random.normal(20, 10), 2)
+        }
+    }

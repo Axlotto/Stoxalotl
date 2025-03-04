@@ -42,69 +42,127 @@ class StockAPI:
         self.cache_ttl = 300  # Cache TTL in seconds (5 minutes)
 
     def _make_finnhub_request(self, url, params):
-        """Helper method to make the actual API request to Finnhub"""
-        logging.info(f"Making Finnhub request: {url} with params {params}")
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json()
+        """Helper method to make the actual API request to Finnhub with detailed logging and validation"""
+        logging.info(f"Making Finnhub request: {url}")
+        
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            
+            # Log response status
+            logging.debug(f"Finnhub response status: {response.status_code}")
+            
+            # Raise for HTTP errors
+            response.raise_for_status()
+            
+            # Parse response
+            data = response.json()
+            
+            return data
+        except Exception as e:
+            logging.error(f"Finnhub API error: {str(e)}")
+            raise
 
     def get_stock(self, ticker: str, retries: int = 3, backoff_factor: float = 0.3, use_cache: bool = True) -> Dict:
-        """Fetch stock data using Finnhub API with rate limiting and caching"""
+        """Fetch stock data using Finnhub API with rate limiting, caching and retry logic"""
+        ticker = ticker.upper()  # Normalize ticker to uppercase
+        
+        # Use proper cache key that includes the ticker
+        cache_key = f"stock_data_{ticker}"
+        
         # Check cache first if enabled
-        cache_key = f"stock_{ticker}"
         if use_cache and cache_key in self.cache:
             cache_entry = self.cache[cache_key]
             if time.time() - cache_entry['timestamp'] < self.cache_ttl:
-                logging.info(f"Using cached stock data for {ticker}")
+                logging.info(f"Using cached stock data for {ticker} from cache key: {cache_key}")
                 return cache_entry['data']
         
         if self.request_counter:
             self.request_counter.increment_api()
         
-        # Use the rate-limited execution
-        try:
-            params = {
-                'symbol': ticker,
-                'token': FINNHUB_API_KEY
-            }
-            url = f"{FINNHUB_API_URL}/quote"
-            
-            # Execute with rate limiting
-            data = execute_finnhub_request(
-                self._make_finnhub_request,
-                url,
-                params
-            )
-            
-            if not data:
-                raise StockAPIError(f"No data found for ticker: {ticker}")
-            
-            # Cache the result
-            if use_cache:
-                self.cache[cache_key] = {
-                    'timestamp': time.time(),
-                    'data': data
-                }
-            
-            return data
-        except requests.exceptions.RequestException as e:
-            error_message = str(e)
-            if hasattr(e, 'response') and e.response:
-                if e.response.status_code == 429:
-                    error_message = f"Rate limit exceeded for Finnhub API. Please try again later."
-                else:
-                    error_message = f"HTTP error {e.response.status_code}: {e.response.text}"
-            
-            raise StockAPIError(f"Failed to fetch stock data: {error_message}")
-        except Exception as e:
-            raise StockAPIError(f"Unexpected error fetching stock data: {str(e)}")
+        # Use exponential backoff for retries
+        retry_count = 0
+        last_error = None
+        
+        while retry_count <= retries:
+            try:
+                if retry_count > 0:
+                    # Calculate delay with exponential backoff
+                    delay = backoff_factor * (2 ** (retry_count - 1))  # Start with backoff_factor seconds
+                    logging.info(f"Retry {retry_count}/{retries} for {ticker} after {delay:.2f}s delay")
+                    time.sleep(delay)
+                
+                # Use the direct approach as in the example
+                base_url = "https://finnhub.io/api/v1/quote"
+                params = {"symbol": ticker, "token": FINNHUB_API_KEY}
+                
+                response = requests.get(base_url, params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                # Validate the response
+                if not data:
+                    raise StockAPIError(f"Empty response for ticker: {ticker}")
+                
+                # Validate required fields
+                required_fields = ['c', 'pc', 'd', 'dp', 'h', 'l']
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if missing_fields:
+                    raise StockAPIError(f"Missing fields for {ticker}: {', '.join(missing_fields)}")
+                
+                # Cache the result
+                if use_cache:
+                    self.cache[cache_key] = {
+                        'timestamp': time.time(),
+                        'data': data
+                    }
+                
+                return data
+                
+            except Exception as e:
+                logging.error(f"Error fetching {ticker}: {str(e)}")
+                last_error = e
+                retry_count += 1
+        
+        # If we got here, all retries failed
+        if last_error:
+            raise last_error
+        else:
+            raise StockAPIError(f"Failed to fetch data for {ticker} after {retries} retries")
 
     def _make_news_api_request(self, url, params):
-        """Helper method to make the actual API request to News API"""
+        """Helper method to make the actual API request to News API with proper authentication"""
+        # Use headers for authentication instead of query parameters
+        headers = {'X-Api-Key': NEWS_API_KEY}
+        
+        # Don't include API key in parameters
+        if 'apiKey' in params:
+            del params['apiKey']
+        
         logging.info(f"Making News API request: {url} with params {params}")
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json()
+        
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if hasattr(e, 'response') and e.response:
+                if e.response.status_code == 401:
+                    logging.error("News API authorization failed - invalid API key")
+                    # Return a structured error response instead of raising exception
+                    return {
+                        'status': 'error',
+                        'message': '🔒 News API authorization failed - check API key',
+                        'articles': []
+                    }
+                elif e.response.status_code == 429:
+                    logging.error("News API rate limit exceeded")
+                    return {
+                        'status': 'error',
+                        'message': '⚠️ News API rate limit exceeded',
+                        'articles': []
+                    }
+            raise
 
     def get_news(self, ticker: str, days_back: int = 3, num_articles: int = 3, use_cache: bool = True) -> List[Dict]:
         """Fetch news articles with rate limiting and caching"""
@@ -121,12 +179,12 @@ class StockAPI:
             self.request_counter.increment('news_api')
             
         try:
+            # Fixed: use 'q' parameter instead of 'n' for query
             params = {
-                'q': ticker,
+                'q': ticker,  # Correct parameter name for query
                 'from': (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d'),
                 'sortBy': 'relevancy',
                 'language': 'en',
-                'apiKey': NEWS_API_KEY,
                 'pageSize': num_articles
             }
             
@@ -137,10 +195,26 @@ class StockAPI:
                 params
             )
             
+            # Check status - data might be an error response from _make_news_api_request
+            if data.get('status') == 'error':
+                # Return the error message from the request function
+                return [{"title": "Error", "description": data.get('message', 'Unknown error'), "source": {"name": "System"}}]
+            
             if data['status'] != 'ok':
-                raise StockAPIError(f"News API error: {data.get('message', 'Unknown error')}")
+                logging.error(f"News API error: {data.get('message', 'Unknown error')}")
+                return [{"title": "Error", "description": f"News API error: {data.get('message', 'Unknown error')}", "source": {"name": "System"}}]
             
             articles = data.get('articles', [])
+            
+            # Enhance articles with properly formatted dates
+            for article in articles:
+                if 'publishedAt' in article:
+                    try:
+                        # Convert ISO date to more readable format
+                        date_obj = datetime.fromisoformat(article['publishedAt'].replace('Z', '+00:00'))
+                        article['formatted_date'] = date_obj.strftime('%b %d, %Y')
+                    except:
+                        article['formatted_date'] = article['publishedAt']
             
             # Cache the result
             if use_cache:
@@ -150,17 +224,11 @@ class StockAPI:
                 }
             
             return articles
-        except requests.exceptions.RequestException as e:
-            error_message = str(e)
-            if hasattr(e, 'response') and e.response:
-                if e.response.status_code == 429:
-                    error_message = "Rate limit exceeded for News API. Please try again later."
-                else:
-                    error_message = f"HTTP error {e.response.status_code}: {e.response.text}"
-            
-            raise StockAPIError(f"News request failed: {error_message}")
         except Exception as e:
-            raise StockAPIError(f"News processing error: {str(e)}")
+            logging.error(f"News processing error: {str(e)}")
+            return [{"title": "News Unavailable", 
+                    "description": f"Could not retrieve news at this time: {str(e)}", 
+                    "source": {"name": "System"}}]
 
     def _finnhub_get_candles(self, ticker, resolution, from_time, to_time):
         """Get historical candle data from Finnhub API"""
@@ -171,14 +239,11 @@ class StockAPI:
             'to': to_time,
             'token': FINNHUB_API_KEY
         }
-        url = f"{FINNHUB_API_URL}/stock/candle"
+        url = "https://finnhub.io/api/v1/stock/candle"
         
-        # Execute with rate limiting
-        return execute_finnhub_request(
-            self._make_finnhub_request,
-            url,
-            params
-        )
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
 
     def get_chart_data(self, ticker: str, timeframe: str = "3M", use_cache: bool = True) -> pd.DataFrame:
         """
@@ -233,12 +298,15 @@ class StockAPI:
         logging.info(f"Chart request time range: from={from_time} ({datetime.fromtimestamp(from_time).strftime('%Y-%m-%d')}), "
                     f"to={to_time} ({datetime.fromtimestamp(to_time).strftime('%Y-%m-%d')})")
         
+        # Use proper Finnhub symbol format - ensure uppercase and handle special cases
+        finnhub_ticker = ticker.upper()
+        
         try:
             # Try to get data from Finnhub
             try:
                 # First check if we can get valid data from Finnhub
                 logging.info(f"Attempting to fetch chart data from Finnhub for {ticker}")
-                data = self._finnhub_get_candles(ticker, resolution, from_time, to_time)
+                data = self._finnhub_get_candles(finnhub_ticker, resolution, from_time, to_time)
                 
                 # Check if data is valid
                 if not data or 'error' in data or data.get('s') == 'no_data' or not data.get('c') or len(data.get('c', [])) == 0:
@@ -430,6 +498,99 @@ class StockAPI:
                 except Exception:
                     # Last resort - empty list with explanation
                     return [{"title": "News Unavailable", "description": "Unable to retrieve market news at this time.", "source": {"name": "System"}}]
+
+    # Added Finnhub function for company profile information (previously might have used Alpha Vantage)
+    def get_company_info(self, ticker: str, use_cache: bool = True) -> Dict:
+        """Get company information using Finnhub API"""
+        # Check cache first if enabled
+        cache_key = f"company_info_{ticker}"
+        if use_cache and cache_key in self.cache:
+            cache_entry = self.cache[cache_key]
+            if time.time() - cache_entry['timestamp'] < self.cache_ttl:
+                logging.info(f"Using cached company info for {ticker}")
+                return cache_entry['data']
+        
+        try:
+            params = {
+                'symbol': ticker,
+                'token': FINNHUB_API_KEY
+            }
+            url = "https://finnhub.io/api/v1/stock/profile2"
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data:
+                raise StockAPIError(f"No company information found for ticker: {ticker}")
+            
+            # Cache the result
+            if use_cache:
+                self.cache[cache_key] = {
+                    'timestamp': time.time(),
+                    'data': data
+                }
+            
+            return data
+        
+        except requests.exceptions.RequestException as e:
+            error_message = str(e)
+            if hasattr(e, 'response') and e.response:
+                if e.response.status_code == 404:
+                    error_message = f"Company information not found for ticker: {ticker}"
+                elif e.response.status_code == 429:
+                    error_message = "Rate limit exceeded for Finnhub API. Please try again later."
+            
+            raise StockAPIError(f"Failed to fetch company information: {error_message}")
+        except Exception as e:
+            raise StockAPIError(f"Error retrieving company information: {str(e)}")
+
+    # Add function to get financial metrics using Finnhub
+    def get_financial_metrics(self, ticker: str, use_cache: bool = True) -> Dict:
+        """Get financial metrics using Finnhub API"""
+        # Check cache first if enabled
+        cache_key = f"financial_metrics_{ticker}"
+        if use_cache and cache_key in self.cache:
+            cache_entry = self.cache[cache_key]
+            if time.time() - cache_entry['timestamp'] < self.cache_ttl:
+                logging.info(f"Using cached financial metrics for {ticker}")
+                return cache_entry['data']
+        
+        try:
+            params = {
+                'symbol': ticker,
+                'metric': 'all',
+                'token': FINNHUB_API_KEY
+            }
+            url = "https://finnhub.io/api/v1/stock/metric"
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data or 'metric' not in data:
+                raise StockAPIError(f"No financial metrics found for ticker: {ticker}")
+            
+            # Cache the result
+            if use_cache:
+                self.cache[cache_key] = {
+                    'timestamp': time.time(),
+                    'data': data
+                }
+            
+            return data
+        
+        except requests.exceptions.RequestException as e:
+            error_message = str(e)
+            if hasattr(e, 'response') and e.response:
+                if e.response.status_code == 404:
+                    error_message = f"Financial metrics not found for ticker: {ticker}"
+                elif e.response.status_code == 429:
+                    error_message = "Rate limit exceeded for Finnhub API. Please try again later."
+            
+            raise StockAPIError(f"Failed to fetch financial metrics: {error_message}")
+        except Exception as e:
+            raise StockAPIError(f"Error retrieving financial metrics: {str(e)}")
 
 class AIClient:
     def __init__(self, model=OLLAMA_MODEL, request_counter=None, max_requests_per_minute=10):

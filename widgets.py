@@ -12,12 +12,13 @@ from PySide6.QtWidgets import (
     QComboBox, QToolBar, QMenuBar, QMenu, QFormLayout, QSlider,
     QGraphicsProxyWidget, QProgressBar
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QSettings, QUrl
-from PySide6.QtGui import QFont, QColor, QActionGroup, QAction
+from PySide6.QtCore import Qt, QTimer, Signal, QSettings, QUrl, QPropertyAnimation  # Move QPropertyAnimation here
+from PySide6.QtGui import QFont, QColor, QActionGroup, QAction  # Remove QPropertyAnimation from here
 import pyqtgraph as pg
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from pyqtgraph import PlotWidget, AxisItem
 from api_client import StockAPI
+from helpers import format_number, format_market_cap, format_percentage, format_currency
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -84,88 +85,151 @@ FONT_SIZES = {
 }
 
 class KeyMetrics(QFrame):
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("metrics")
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setStyleSheet("""
+            QFrame {
+                background-color: #212121;
+                border-radius: 10px;
+                padding: 10px;
+            }
+            QLabel {
+                color: #e0e0e0;
+            }
+            .MetricValue {
+                font-weight: bold;
+                font-size: 14px;
+            }
+            .MetricLabel {
+                color: #9e9e9e;
+                font-size: 12px;
+            }
+        """)
+        
+        self._init_ui()
+        
+    def _init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-
+        
+        # Title
         title = QLabel("Key Metrics")
-        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
-
-        self.grid = QGridLayout()
-        self.grid.setVerticalSpacing(8)
-        self.grid.setHorizontalSpacing(16)
-
+        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(title)
-        layout.addLayout(self.grid)
-        layout.addStretch()
-
-    def update_metrics(self, metrics):
-        # Clear previous metrics
-        for i in reversed(range(self.grid.count())):
-            widget = self.grid.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
-
-        # Add new metrics
-        row = 0
-        for key, value in metrics.items():
-            # Format the key for display
-            display_key = key.replace('_', ' ').title()
+        
+        # Create grid layout for metrics
+        self.metrics_grid = QGridLayout()
+        self.metrics_grid.setSpacing(10)
+        
+        # Define metric positions
+        self.metric_positions = {
+            "P/E Ratio": (0, 0),
+            "Dividend Yield": (0, 1),
+            "52W High": (1, 0),
+            "52W Low": (1, 1),
+            "Market Cap": (2, 0),
+            "P/B Ratio": (2, 1),
+        }
+        
+        # Initialize metric widgets
+        self.metric_labels = {}
+        self.metric_values = {}
+        
+        for label, position in self.metric_positions.items():
+            # Create label
+            self.metric_labels[label] = QLabel(label)
+            self.metric_labels[label].setProperty("class", "MetricLabel")
             
-            lbl = QLabel(display_key)
-            lbl.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
-            lbl.setStyleSheet(f"color: {THEMES['Dark']['text-secondary']}")
-
-            # Format the value appropriately
-            if isinstance(value, (int, float, np.floating)):
-                if 'price' in key.lower() or 'close' in key.lower() or 'high' in key.lower() or 'low' in key.lower() or 'open' in key.lower():
-                    formatted_value = f"${value:.2f}"
-                elif key == 'market_cap' or key == 'marketcapitalization':
-                    if value >= 1e9:
-                        formatted_value = f"${value/1e9:.2f}B"
-                    else:
-                        formatted_value = f"${value/1e6:.2f}M"
-                elif key == 'volume':
-                    formatted_value = f"{value:,.0f}"
-                elif 'dividend' in key.lower() or 'yield' in key.lower() or 'change %' in key.lower():
-                    formatted_value = f"{value:.2f}%"
-                else:
-                    formatted_value = f"{value:.2f}"
-            else:
-                formatted_value = str(value)
-
-            val = QLabel(formatted_value)
-            val.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Medium))
+            # Create value label with placeholder
+            self.metric_values[label] = QLabel("--")
+            self.metric_values[label].setProperty("class", "MetricValue")
+            self.metric_values[label].setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             
-            # Set color based on value type
-            if 'change' in key.lower() or key.lower() == 'current price':
-                if isinstance(value, (int, float, np.floating)):
-                    if key.lower() == 'current price':
-                        # Compare with previous close if available
-                        if 'previous close' in metrics and value > metrics['Previous Close']:
-                            val.setStyleSheet(f"color: {THEMES['Dark']['positive']}")
-                        elif 'previous close' in metrics and value < metrics['Previous Close']:
-                            val.setStyleSheet(f"color: {THEMES['Dark']['negative']}")
+            # Add to grid with vertical layout for each metric
+            metric_container = QWidget()
+            metric_layout = QVBoxLayout(metric_container)
+            metric_layout.setContentsMargins(5, 5, 5, 5)
+            metric_layout.addWidget(self.metric_labels[label])
+            metric_layout.addWidget(self.metric_values[label])
+            
+            # Add to grid
+            self.metrics_grid.addWidget(metric_container, position[0], position[1])
+        
+        # Add grid to main layout
+        layout.addLayout(self.metrics_grid)
+        
+        # Add last updated timestamp
+        self.last_updated = QLabel("Last Updated: Never")
+        self.last_updated.setStyleSheet("color: #9e9e9e; font-size: 10px;")
+        self.last_updated.setAlignment(Qt.AlignRight)
+        layout.addWidget(self.last_updated)
+
+    def update_metrics(self, metrics_data):
+        """Update displayed metrics with real data"""
+        try:
+            # Extract metrics from Finnhub data format
+            metrics = metrics_data.get('metric', {})
+            
+            # Show loading indicator if it exists
+            if hasattr(self, 'loading_label') and self.loading_label:
+                self.loading_label.setVisible(True)
+                QApplication.processEvents()
+            
+            # Map Finnhub fields to our display metrics with proper formatting
+            mappings = {
+                "P/E Ratio": ("peTTM", lambda x: format_number(x, 2, False) if x else "--"),
+                "Dividend Yield": ("dividendYieldIndicatedAnnual", lambda x: format_percentage(x) if x else "--"),
+                "52W High": ("52WeekHigh", lambda x: format_currency(x) if x else "--"),
+                "52W Low": ("52WeekLow", lambda x: format_currency(x) if x else "--"),
+                "Market Cap": ("marketCapitalization", lambda x: format_market_cap(x) if x else "--"),
+                "P/B Ratio": ("pbAnnual", lambda x: format_number(x, 2, False) if x else "--"),
+            }
+            
+            # Update each metric
+            for display_name, (finnhub_field, formatter) in mappings.items():
+                value = metrics.get(finnhub_field)
+                formatted_value = formatter(value)
+                if display_name in self.metric_values:
+                    self.metric_values[display_name].setText(formatted_value)
+                    
+                    # Set color based on whether value is good/bad for certain metrics
+                    if display_name == "P/E Ratio" and value is not None:
+                        if value < 15:
+                            self.metric_values[display_name].setStyleSheet("color: #4CAF50;")  # Green
+                        elif value > 30:
+                            self.metric_values[display_name].setStyleSheet("color: #F44336;")  # Red
                         else:
-                            val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
-                    elif value > 0:
-                        val.setStyleSheet(f"color: {THEMES['Dark']['positive']}")
-                    elif value < 0:
-                        val.setStyleSheet(f"color: {THEMES['Dark']['negative']}")
-                    else:
-                        val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
-                else:
-                    val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
-            else:
-                val.setStyleSheet(f"color: {THEMES['Dark']['text']}")
-
-            self.grid.addWidget(lbl, row, 0)
-            self.grid.addWidget(val, row, 1)
-            row += 1
-
+                            self.metric_values[display_name].setStyleSheet("color: #e0e0e0;")  # Default
+            
+            # Update the timestamp
+            if hasattr(self, 'last_updated'):
+                self.last_updated.setText(f"Last Updated: {datetime.now().strftime('%H:%M:%S')}")
+                
+            # Hide loading indicator if it exists
+            if hasattr(self, 'loading_label') and self.loading_label:
+                self.loading_label.setVisible(False)
+                
+        except Exception as e:
+            logging.error(f"Error updating metrics: {e}")
+            
+            # Show error message in metrics if something went wrong
+            for display_name in self.metric_values:
+                self.metric_values[display_name].setText("Error")
+    
+    def _format_market_cap(self, value: float) -> str:
+        """Format market cap in billions or trillions"""
+        if value is None:
+            return "--"
+        
+        # Finnhub returns market cap in millions
+        value_millions = float(value)
+        
+        if value_millions >= 1000000:  # Trillion+
+            return f"${value_millions/1000000:.1f}T"
+        elif value_millions >= 1000:  # Billion+
+            return f"${value_millions/1000:.1f}B"
+        else:  # Million
+            return f"${value_millions:.0f}M"
 class DateAxis(AxisItem):
     def tickStrings(self, values, scale, spacing):
         """Convert timestamps to UK date format"""
@@ -504,7 +568,7 @@ class StockChart(PlotWidget):
                 stock_api = StockAPI()
                 hist = stock_api.get_chart_data(ticker, time_frame)
                 
-                if hist.empty:
+                if (hist.empty):
                     self.clear()
                     error_text = pg.TextItem(text=f"No data available for {ticker}", color=(255, 50, 50))
                     self.addItem(error_text)
@@ -670,56 +734,104 @@ class StockOverview(QFrame):
                 color: #FFD700;  /* Gold color for active state */
             }
             QPushButton:hover {
-                color: #FFFFFF;
+                color: #aaaaaa;
             }
         """)
         
         header.addWidget(self.ticker)
         header.addWidget(self.watchlist_btn)
-        header.addStretch()
+        layout.addLayout(header)
         
+        # Price and change labels
         self.price = QLabel()
         self.price.setFont(QFont(FONT_FAMILY, 28, QFont.Medium))
         
         self.change = QLabel()
         self.change.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
         
-        layout.addLayout(header)
-        layout.addWidget(self.price)
-        layout.addWidget(self.change)
-        layout.addStretch()
-
-    def update_overview(self, ticker, price, change, is_favorite=False):
+        price_layout = QVBoxLayout()
+        price_layout.addWidget(self.price)
+        price_layout.addWidget(self.change)
+        layout.addLayout(price_layout)
+        
+        # Add last updated timestamp
+        self.last_updated_label = QLabel("Last updated: Never")
+        self.last_updated_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["small"]))
+        self.last_updated_label.setStyleSheet("color: #757575;")
+        self.last_updated_label.setAlignment(Qt.AlignRight)
+        layout.addWidget(self.last_updated_label)
+        
+        # Add loading spinner
+        self.loading_spinner = self._create_loading_indicator()
+    
+    def _create_loading_indicator(self):
+        """Create a loading indicator"""
+        loading = QLabel("⟳")  # Unicode refresh symbol as placeholder
+        loading.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        loading.setStyleSheet("color: #00bcd4; font-size: 16px;")
+        loading.setVisible(False)
+        # Position it in the top right corner
+        self.layout().addWidget(loading)
+        return loading
+    
+    def show_loading(self):
+        """Show loading indicator"""
+        if hasattr(self, 'loading_spinner'):
+            self.loading_spinner.setVisible(True)
+            QApplication.processEvents()
+    
+    def hide_loading(self):
+        """Hide loading indicator"""
+        if hasattr(self, 'loading_spinner'):
+            self.loading_spinner.setVisible(False)
+    
+    def update_overview(self, ticker, price, change_text):
+        """Update stock overview with new data"""
+        # Show loading indicator first
+        self.show_loading()
+        
+        # Update the ticker and price information
         self.ticker.setText(ticker)
         self.price.setText(f"${price:.2f}")
-        self.change.setText(change)
-        # Update button state and text based on favorite status
-        self.watchlist_btn.setChecked(is_favorite)
-        self.watchlist_btn.setText("★" if is_favorite else "☆")
+        self.change.setText(change_text)
+        
+        # Set color of change text based on whether it's positive or negative
+        if change_text.startswith("+"):
+            self.change.setStyleSheet("color: #4CAF50;")  # Green for positive
+        else:
+            self.change.setStyleSheet("color: #F44336;")  # Red for negative or zero
+        
+        # Update last updated timestamp
+        if hasattr(self, 'last_updated_label'):
+            self.last_updated_label.setText(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+        
+        # Hide loading indicator after a short delay (ensures it's visible even for fast updates)
+        QTimer.singleShot(500, self.hide_loading)
 
 class AnalysisCard(QFrame):
-    maximize_signal = Signal(dict)  # Add this signal definition
-
+    # Signal for maximizing the card
+    maximize_signal = Signal(dict)
+    
     def __init__(self, title):
         super().__init__()
-        self.title = title
-        self.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         self.setLineWidth(2)
         
-        layout = QVBoxLayout(self)
+        self.title = title
         
         # Title label
         self.title_label = QLabel(title)
-        self.title_label.setFont(QFont("Arial", 12, QFont.Bold))
+        self.title_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         
-        # Content text edit
+        # Content area
         self.content = QTextEdit()
         self.content.setReadOnly(True)
         self.content.setMinimumHeight(100)
         
+        layout = QVBoxLayout(self)
         layout.addWidget(self.title_label)
         layout.addWidget(self.content)
-        
+                
         # Make the card clickable
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -733,170 +845,69 @@ class AnalysisCard(QFrame):
                 'content': self.content.toPlainText()
             })
         super().mousePressEvent(event)
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Preferences")
-        layout = QVBoxLayout()
+    
+    def show_loading(self):
+        """Show loading state in the card"""
+        self.content.setHtml(
+            """<div style='color: #757575; font-style: italic;'>
+               Loading analysis data...
+               <div style='margin-top: 10px;'>
+                 <div style='height: 10px; width: 100px; background-color: #333;
+                      border-radius: 5px; overflow: hidden; position: relative;'>
+                   <div style='position: absolute; height: 100%; width: 30px; 
+                        background-color: #00bcd4; border-radius: 5px;
+                        animation: pulse 1.5s infinite;'></div>
+                 </div>
+               </div>
+             </div>"""
+        )
+        QApplication.processEvents()
+    
+    def set_content(self, text):
+        """Set content with proper formatting"""
+        # Remove any loading indicators
+        self.content.clear()
         
-        form = QFormLayout()
-        self.model_selector = QComboBox()
-        self.model_selector.addItems(["deepseek-r1:1.5b", "llama2", "mistral"])
-        
-        self.interval_slider = QSlider(Qt.Horizontal)
-        self.interval_slider.setRange(5, 60)
-        self.interval_slider.setTickInterval(5)
-        
-        form.addRow("AI Model:", self.model_selector)
-        form.addRow("Update Interval (sec):", self.interval_slider)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        
-        layout.addLayout(form)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-
-class RecommendationWidget(QFrame):
-    """Widget to display peak prices and support/resistance levels"""
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("technical_levels")
-        self.current_theme = "Dark"
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-
-        title = QLabel("Technical Levels")
-        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
-        layout.addWidget(title)
-
-        self.grid = QGridLayout()
-        self.grid.setVerticalSpacing(8)
-        self.grid.setHorizontalSpacing(16)
-        layout.addLayout(self.grid)
-        layout.addStretch()
-
-    def update_levels(self, data):
-        """
-        Update the grid with price levels and technical indicators
-        data: dictionary containing peak prices and support/resistance levels
-        """
-        # Clear previous entries
-        for i in reversed(range(self.grid.count())):
-            widget = self.grid.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
-
-        row = 0
-        
-        # Add period highs and lows
-        for period in ['1D', '1W', '1M', '3M', '6M', '1Y']:
-            if period in data.get('peaks', {}):
-                # Period label
-                period_label = QLabel(period)
-                period_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Bold))
-                period_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text']}")
-                self.grid.addWidget(period_label, row, 0, 1, 2)
-                row += 1
-
-                # High value
-                high_label = QLabel("High:")
-                high_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
-                high_value = QLabel(f"${data['peaks'][period]['high']:.2f}")
-                high_value.setStyleSheet(f"color: {THEMES[self.current_theme]['positive']}")
-                self.grid.addWidget(high_label, row, 0)
-                self.grid.addWidget(high_value, row, 1)
-                row += 1
-
-                # Low value
-                low_label = QLabel("Low:")
-                low_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
-                low_value = QLabel(f"${data['peaks'][period]['low']:.2f}")
-                low_value.setStyleSheet(f"color: {THEMES[self.current_theme]['negative']}")
-                self.grid.addWidget(low_label, row, 0)
-                self.grid.addWidget(low_value, row, 1)
-                row += 1
-
-        # Add separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setStyleSheet(f"background-color: {THEMES[self.current_theme]['border']}")
-        self.grid.addWidget(separator, row, 0, 1, 2)
-        row += 1
-
-        # Add support/resistance levels
-        if 'levels' in data:
-            support_label = QLabel("Support:")
-            support_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
-            support_value = QLabel(f"${data['levels']['support']:.2f}")
-            support_value.setStyleSheet(f"color: {THEMES[self.current_theme]['positive']}")
-            self.grid.addWidget(support_label, row, 0)
-            self.grid.addWidget(support_value, row, 1)
-            row += 1
-
-            resistance_label = QLabel("Resistance:")
-            resistance_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
-            resistance_value = QLabel(f"${data['levels']['resistance']:.2f}")
-            resistance_value.setStyleSheet(f"color: {THEMES[self.current_theme]['negative']}")
-            self.grid.addWidget(resistance_label, row, 0)
-            self.grid.addWidget(resistance_value, row, 1)
-
-    def update_recommendations(self, recommendations):
-        """
-        Update the widget with new recommendations.
-        """
-        # Clear previous entries
-        for i in reversed(range(self.grid.count())):
-            widget = self.grid.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
-
-        row = 0
-        for rec in recommendations:
-            label = QLabel(rec)
-            label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"]))
-            label.setStyleSheet(f"color: {THEMES[self.current_theme]['text']}")
-            self.grid.addWidget(label, row, 0, 1, 2)
-            row += 1
+        # Apply text with formatting if it's an HTML string
+        if text.strip().startswith("<"):
+            self.content.setHtml(text)
+        else:
+            self.content.setPlainText(text)
 
 class ProfitTarget(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
-
+        
         # Title
         title = QLabel("Profit Target Analysis")
         title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(title)
-
+        
         # Current Price
         self.current_price_label = QLabel("Current Price: N/A")
         self.current_price_label.setStyleSheet("color: #e0e0e0;")
         layout.addWidget(self.current_price_label)
-
+        
         # Profit Target
         self.profit_target_label = QLabel(f"Target Profit: {format_percentage(DEFAULTS['profit_target'])}")
         self.profit_target_label.setStyleSheet("color: #4CAF50;")  # Green color
         layout.addWidget(self.profit_target_label)
-
+        
         # Target Price
         self.target_price_label = QLabel("Target Price: N/A")
         self.target_price_label.setStyleSheet("color: #e0e0e0;")
         layout.addWidget(self.target_price_label)
-
+        
         # Progress Bar with modern style
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: none;
-                border-radius: 5px;
                 background-color: #2d2d2d;
+                border: none;
                 height: 20px;
                 text-align: center;
             }
@@ -957,6 +968,104 @@ class ProfitTarget(QWidget):
             self.target_price_label.setText("Target Price: N/A")
             self.progress_bar.setValue(0)
 
+class RecommendationWidget(QFrame):
+    """Widget to display peak prices and support/resistance levels"""
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("technical_levels")
+        self.current_theme = "Dark"
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+        
+        title = QLabel("Technical Levels")
+        title.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.DemiBold))
+        layout.addWidget(title)
+
+        self.grid = QGridLayout()
+        self.grid.setVerticalSpacing(8)
+        self.grid.setHorizontalSpacing(16)
+        layout.addLayout(self.grid)
+        layout.addStretch()
+        
+    def update_levels(self, data):
+        """
+        Update the grid with price levels and technical indicators
+        data: dictionary containing peak prices and support/resistance levels
+        """
+        # Clear previous entries
+        for i in reversed(range(self.grid.count())):
+            widget = self.grid.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        row = 0
+        
+        # Add period highs and lows
+        for period in ['1D', '1W', '1M', '3M', '6M', '1Y']:
+            if period in data.get('peaks', {}):
+                # Period label
+                period_label = QLabel(period)
+                period_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["body"], QFont.Bold))
+                period_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text']}")
+                self.grid.addWidget(period_label, row, 0, 1, 2)
+                row += 1
+                
+                # High value
+                high_label = QLabel("High:")
+                high_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
+                high_value = QLabel(f"${data['peaks'][period]['high']:.2f}")
+                high_value.setStyleSheet(f"color: {THEMES[self.current_theme]['positive']}")
+                self.grid.addWidget(high_label, row, 0)
+                self.grid.addWidget(high_value, row, 1)
+                row += 1
+                
+                # Low value
+                low_label = QLabel("Low:")
+                low_label.setStyleSheet(f"color: {THEMES[self.current_theme]['text-secondary']}")
+                low_value = QLabel(f"${data['peaks'][period]['low']:.2f}")
+                low_value.setStyleSheet(f"color: {THEMES[self.current_theme]['negative']}")
+                self.grid.addWidget(low_label, row, 0)
+                self.grid.addWidget(low_value, row, 1)
+                row += 1
+
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(self)
+        
+        # Model Selection
+        form_layout = QFormLayout()
+        self.model_selector = QComboBox()
+        self.model_selector.addItems(["deepseek-r1:1.5b", "deepseek-r2:2.0b", "gemini-pro", "gpt-3.5-turbo"])
+        current_model = parent.settings.value("Model", "deepseek-r1:1.5b") if parent else "deepseek-r1:1.5b"
+        self.model_selector.setCurrentText(current_model)
+        form_layout.addRow("AI Model:", self.model_selector)
+        
+        # Update Interval
+        interval_widget = QWidget()
+        interval_layout = QHBoxLayout(interval_widget)
+        self.interval_slider = QSlider(Qt.Horizontal)
+        self.interval_slider.setRange(5, 60)
+        current_interval = int(parent.settings.value("Interval", 15)) if parent else 15
+        self.interval_slider.setValue(current_interval)
+        self.interval_label = QLabel(f"{current_interval} seconds")
+        self.interval_slider.valueChanged.connect(lambda v: self.interval_label.setText(f"{v} seconds"))
+        interval_layout.addWidget(self.interval_slider)
+        interval_layout.addWidget(self.interval_label)
+        form_layout.addRow("Update Interval:", interval_widget)
+        
+        layout.addLayout(form_layout)
+        
+        # Dialog buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
 class ModernStockApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -967,6 +1076,7 @@ class ModernStockApp(QMainWindow):
         
         self.setWindowTitle("Stoxalotl")
         self.setGeometry(100, 100, 1280, 800)
+        
         self._setup_ui()
         self._apply_theme()
         
@@ -979,11 +1089,11 @@ class ModernStockApp(QMainWindow):
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
-
+        
         # Menu Bar
         menu_bar = QMenuBar()
         settings_menu = QMenu("&Settings", self)
-
+        
         # Theme Menu
         theme_menu = QMenu("&Theme", self)
         self.theme_group = QActionGroup(self)
@@ -994,35 +1104,34 @@ class ModernStockApp(QMainWindow):
             theme_menu.addAction(action)
             if theme == self.current_theme:
                 action.setChecked(True)
-
+        
         # Preferences Action
         pref_action = QAction("Preferences", self)
         pref_action.triggered.connect(self._show_settings)
+        
         settings_menu.addMenu(theme_menu)
         settings_menu.addAction(pref_action)
         menu_bar.addMenu(settings_menu)
         self.setMenuBar(menu_bar)
-
+        
         # Toolbar
         toolbar = QToolBar()
         self.time_frame = QComboBox()
         self.time_frame.addItems(["1D", "1W", "1M", "3M", "1Y", "5Y"])
         self.chart_type = QComboBox()
         self.chart_type.addItems(["Line", "Candlestick"])
-        
         toolbar.addWidget(QLabel("Time Frame:"))
         toolbar.addWidget(self.time_frame)
         toolbar.addWidget(QLabel("Chart Type:"))
         toolbar.addWidget(self.chart_type)
         self.addToolBar(toolbar)
-
+        
         # Main Content
         self.stacked_widget = QStackedWidget()
         self._setup_home_page()
         self._setup_analysis_page()
-        
         main_layout.addWidget(self.stacked_widget)
-        
+
     def _setup_home_page(self):
         # Home page implementation similar to previous version
         pass
@@ -1030,7 +1139,7 @@ class ModernStockApp(QMainWindow):
     def _setup_analysis_page(self):
         page = QWidget()
         layout = QHBoxLayout(page)
-
+        
         # Left Panel
         left_panel = QWidget()
         left_panel.setFixedWidth(300)
@@ -1043,12 +1152,13 @@ class ModernStockApp(QMainWindow):
         left_layout.addWidget(self.overview)
         left_layout.addWidget(self.metrics)
         left_layout.addWidget(self.recommendation)
-
+        
         # Right Panel
         right_panel = QTabWidget()
         self.chart = StockChart()
         self.news_card = AnalysisCard("Latest News")
         self.analysis_card = AnalysisCard("AI Analysis")
+        
         right_panel.addTab(self.chart, "Chart")
         right_panel.addTab(self.news_card, "News")
         right_panel.addTab(self.analysis_card, "Analysis")
@@ -1106,5 +1216,2323 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ModernStockApp()
     window.show()
-
     sys.exit(app.exec())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
