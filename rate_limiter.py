@@ -2,6 +2,11 @@ import time
 import threading
 from collections import deque
 import logging
+from typing import Any, Callable, Dict, List, Optional
+import requests
+
+# Import from config to ensure consistency
+from config import FINNHUB_KEY, NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
 
 class RateLimiter:
     """

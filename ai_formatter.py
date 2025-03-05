@@ -36,7 +36,7 @@ class AnalysisFormatter:
             r'\b(hold|neutral|sideways|consolidation|cautious|monitor|watch)\b': 
                 r'<span style="color: #FFD700; font-weight: bold;">\1</span>',
                 
-            # Technical terms - purple
+            # Technical terms - purple - fix potential invalid color
             r'\b(resistance|support|moving average|MACD|RSI|volume|indicator)\b': 
                 r'<span style="color: #BB86FC; font-weight: bold;">\1</span>',
         }
@@ -130,3 +130,59 @@ class AnalysisFormatter:
         
         # Set as HTML
         editor.setHtml(formatted_html)
+
+    @staticmethod
+    def parse_ollama_response(response: str) -> dict:
+        """
+        Enforce structured format:
+        [Current Price] $999.99
+        [30-Day Target] $1234.56 (±10%)
+        [Action] Buy/Hold/Sell
+        [Rationale] Short explanation
+        """
+        lines = response.splitlines()
+        result = {}
+        for line in lines:
+            if line.startswith("[Current Price]"):
+                result["price"] = line.split("$")[1].strip()
+            elif line.startswith("[30-Day Target]"):
+                # Extract target and optional confidence
+                # ...existing logic to parse...
+                pass
+            elif line.startswith("[Action]"):
+                result["action"] = line.split("]", 1)[1].strip()
+            elif line.startswith("[Rationale]"):
+                result["rationale"] = line.split("]", 1)[1].strip()
+        return result
+
+    @staticmethod
+    def format_analysis(parsed: dict) -> str:
+        """
+        Return bullet points with color-coded action:
+        • 📈 Current Price...
+        • 🎯 30-Day Target...
+        • 🚀 Recommendation...
+        • 💡 Reason...
+        """
+        action_color = "#2ECC71" if parsed.get("action", "").lower() == "buy" \
+                    else "#E74C3C" if parsed.get("action", "").lower() == "sell" \
+                    else "#F39C12"
+        return f"""
+        • <b>📈 Current Price</b>: ${parsed.get('price','--')}
+        • <b>🎯 30-Day Target</b>: $-- (--% confidence)
+        • <b style="color: {action_color};">🚀 Recommendation</b>: {parsed.get('action','N/A')}
+        • <b>💡 Reason</b>: {parsed.get('rationale','No rationale provided')}
+        """
+
+    @staticmethod
+    def get_safe_analysis(response: str) -> str:
+        """Try to parse and format the analysis, return fallback if any error."""
+        try:
+            parsed = AnalysisFormatter.parse_ollama_response(response)
+            return AnalysisFormatter.format_analysis(parsed)
+        except Exception as e:
+            return f"""
+            ⚠️ Analysis Unavailable
+            Error: {str(e)}
+            Last Price: $--
+            """

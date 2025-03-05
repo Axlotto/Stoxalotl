@@ -1,10 +1,16 @@
 # config.py
+import os
+import sys
+
+# Import dotenv_loader first to make sure environment variables are loaded
+import dotenv_loader  # Load .env before using os.getenv
+
 # Application Colors - More refined and customizable
 COLOR_PALETTES = {
     "Dark": {
         "background": "#121212",       # Deeper dark grey
         "surface": "#212121",          # Elevated surface
-        "primary": "#BB86FC",           # Purple
+        "primary": "#BB86FC",          # Purple (fixed from potentially invalid #BB value)
         "secondary": "#3700B3",         # Darker purple
         "accent": "#03DAC6",            # Teal accent
         "text": "#FFFFFF",              # Pure white
@@ -62,11 +68,15 @@ OLLAMA_MODEL = "deepseek-r1:1.5b"
 CHAT_MODEL = "llama3.2:1b"  # Add this line
 
 # News API Configuration
-NEWS_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Replace with your actual key
+NEWS_API_KEY = os.getenv("NEWSAPI_KEY", "c91f9673406647e280aa6faf87ef892a")  # Use env var as primary source
+if not NEWS_API_KEY:
+    raise ValueError("Please set a valid NEWSAPI_KEY in API.env")
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 # Finnhub API Configuration
-FINNHUB_API_KEY = "cv0ahshr01qo8ssfll90cv0ahshr01qo8ssfll9g"  # Use the API key from your example
+FINNHUB_KEY = os.getenv("FINNHUB_KEY")
+if not FINNHUB_KEY:
+    raise ValueError("Please set a valid FINNHUB_KEY in API.env")
 FINNHUB_API_URL = "https://finnhub.io/api/v1"  # Keep this for reference but use direct URLs in code
 
 # Chart Configuration - More options

@@ -9,7 +9,7 @@ import time
 import logging
 import requests
 from typing import Tuple, Dict, Optional, List, Set
-from config import FINNHUB_API_KEY, FINNHUB_API_URL
+from config import FINNHUB_KEY, FINNHUB_API_URL
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -182,7 +182,7 @@ def _verify_ticker_with_finnhub(ticker: str) -> bool:
         url = f"{FINNHUB_API_URL}/stock/profile2"
         params = {
             'symbol': ticker,
-            'token': FINNHUB_API_KEY
+            'token': FINNHUB_KEY
         }
         
         response = requests.get(url, params=params)

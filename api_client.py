@@ -1,10 +1,12 @@
+import os
 import requests
+import re  # Add this import for regex operations
 import pandas as pd
 import numpy as np  # Add NumPy import for dummy data generation
 from datetime import datetime, timedelta
 from tradingview_ta import TA_Handler, Interval
 from typing import Dict, List, Optional, Union
-from config import FINNHUB_API_KEY, FINNHUB_API_URL, NEWS_API_KEY, NEWS_API_URL, OLLAMA_MODEL
+from config import OLLAMA_MODEL, NEWS_API_URL, NEWS_API_KEY  # Add NEWS_API_URL import here
 import ollama
 import time
 import threading
@@ -23,6 +25,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Initialize global request manager with 10 seconds between requests
 api_request_manager = ApiRequestManager(min_request_interval=10.0)
+
+# Use environment variables for API keys
+FINNHUB_KEY = os.getenv("FINNHUB_KEY", "your_fallback_key")
+# Use the imported NEWS_API_KEY from config instead of getting from env directly
 
 class StockAPIError(Exception):
     """Custom exception for Stock API errors"""
@@ -93,7 +99,7 @@ class StockAPI:
                 
                 # Use the direct approach as in the example
                 base_url = "https://finnhub.io/api/v1/quote"
-                params = {"symbol": ticker, "token": FINNHUB_API_KEY}
+                params = {"symbol": ticker, "token": FINNHUB_KEY}
                 
                 response = requests.get(base_url, params=params)
                 response.raise_for_status()
@@ -135,7 +141,7 @@ class StockAPI:
         # Use headers for authentication instead of query parameters
         headers = {'X-Api-Key': NEWS_API_KEY}
         
-        # Don't include API key in parameters
+        # Don't include API key in parameters as we're using header authentication
         if 'apiKey' in params:
             del params['apiKey']
         
@@ -143,12 +149,19 @@ class StockAPI:
         
         try:
             response = requests.get(url, params=params, headers=headers, timeout=10)
+            
+            # Log the actual request URL for debugging (with API key removed)
+            debug_url = response.request.url
+            debug_url = re.sub(r'apiKey=[^&]*', 'apiKey=REDACTED', debug_url)
+            logging.debug(f"Full News API request URL: {debug_url}")
+            
             response.raise_for_status()
             return response.json()
         except requests.exceptions.HTTPError as e:
             if hasattr(e, 'response') and e.response:
                 if e.response.status_code == 401:
                     logging.error("News API authorization failed - invalid API key")
+                    logging.debug(f"API key used: {NEWS_API_KEY[:5]}...{NEWS_API_KEY[-3:] if NEWS_API_KEY else 'None'}")
                     # Return a structured error response instead of raising exception
                     return {
                         'status': 'error',
@@ -179,14 +192,20 @@ class StockAPI:
             self.request_counter.increment('news_api')
             
         try:
-            # Fixed: use 'q' parameter instead of 'n' for query
+            # Calculate a valid past date (not future date)
+            from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+            
+            # Build parameters with correct names and proper separation
             params = {
                 'q': ticker,  # Correct parameter name for query
-                'from': (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d'),
-                'sortBy': 'relevancy',
-                'language': 'en',
-                'pageSize': num_articles
+                'from': from_date,  # Valid past date
+                'sortBy': 'relevancy',  # Correct parameter name
+                'language': 'en',  # Separate parameter
+                'pageSize': num_articles  # Correct parameter name and separate
             }
+            
+            # Log the URL being used with parameters
+            logging.info(f"Making news request to: {NEWS_API_URL} with query: {ticker}, from: {from_date}")
             
             # Execute with rate limiting
             data = execute_news_api_request(
@@ -237,10 +256,9 @@ class StockAPI:
             'resolution': resolution,
             'from': from_time,
             'to': to_time,
-            'token': FINNHUB_API_KEY
+            'token': FINNHUB_KEY
         }
         url = "https://finnhub.io/api/v1/stock/candle"
-        
         response = requests.get(url, params=params)
         response.raise_for_status()
         return response.json()
@@ -248,15 +266,13 @@ class StockAPI:
     def get_chart_data(self, ticker: str, timeframe: str = "3M", use_cache: bool = True) -> pd.DataFrame:
         """
         Get chart data using Finnhub instead of yfinance
-        
         Args:
             ticker: Stock symbol
             timeframe: Time period (1D, 1W, 1M, 3M, 6M, 1Y, 5Y)
             use_cache: Whether to use cached data
-            
         Returns:
             DataFrame with OHLCV data
-        """
+        """ 
         # Check cache first if enabled
         cache_key = f"chart_{ticker}_{timeframe}"
         if use_cache and cache_key in self.cache:
@@ -313,7 +329,7 @@ class StockAPI:
                     logging.warning(f"Invalid or empty data returned from Finnhub: {data}")
                     # Generate dummy data if Finnhub data is invalid
                     return self._generate_dummy_chart_data(ticker, from_time, to_time)
-                    
+                
                 # If we got here, data looks valid
                 df = pd.DataFrame({
                     'Open': data.get('o', []),
@@ -322,7 +338,6 @@ class StockAPI:
                     'Close': data.get('c', []),
                     'Volume': data.get('v', [])
                 })
-                
                 timestamps = [datetime.fromtimestamp(t) for t in data.get('t', [])]
                 df.index = pd.DatetimeIndex(timestamps)
                 
@@ -332,18 +347,15 @@ class StockAPI:
                         'timestamp': time.time(),
                         'data': df
                     }
-                
                 return df
-                
             except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
                 if hasattr(e, 'response') and e.response and e.response.status_code == 403:
                     logging.error(f"Finnhub API access forbidden (403). Please check your API key and permissions.")
                 else:
                     logging.error(f"Finnhub API request failed: {str(e)}")
-                
                 # Fall back to dummy data
                 return self._generate_dummy_chart_data(ticker, from_time, to_time)
-        
+                
         except Exception as e:
             logging.error(f"Error fetching chart data: {e}")
             return self._generate_dummy_chart_data(ticker, from_time, to_time)
@@ -383,7 +395,6 @@ class StockAPI:
             if dt.weekday() < 5:  # Monday=0, Sunday=6
                 daily_volatility = np.random.normal(0, volatility)
                 daily_trend = trend * (1 + np.random.normal(0, 0.5))
-                
                 open_price = price
                 close_price = price * (1 + daily_volatility + daily_trend)
                 high_price = max(open_price, close_price) * (1 + abs(np.random.normal(0, volatility/2)))
@@ -398,7 +409,6 @@ class StockAPI:
                 volumes.append(max(100, volume))
                 
                 price = close_price
-            
             current += 24 * 60 * 60  # Add one day
         
         # Reset the seed to avoid affecting other random number generation
@@ -451,27 +461,23 @@ class StockAPI:
     def get_market_news(self, days_back: int = 3, num_articles: int = 5, use_cache: bool = True) -> List[Dict]:
         """
         Fetch general market news (not specific to a ticker)
-        
         Args:
             days_back: Number of days to look back
             num_articles: Maximum number of articles to return
             use_cache: Whether to use cached data
-            
         Returns:
             List of news articles
-        """
+        """ 
         # First try to get news normally with "market" as keyword
         try:
             return self.get_news("market", days_back, num_articles, use_cache)
         except Exception as e:
             logging.warning(f"Error fetching market news: {e}")
-            
             # If that fails, try with another general finance keyword
             try:
                 return self.get_news("finance", days_back, num_articles, use_cache)
             except Exception as e2:
                 logging.warning(f"Error fetching finance news: {e2}")
-                
                 # If that also fails, try to generate dummy news
                 try:
                     # Import the dummy data module
@@ -509,18 +515,15 @@ class StockAPI:
             if time.time() - cache_entry['timestamp'] < self.cache_ttl:
                 logging.info(f"Using cached company info for {ticker}")
                 return cache_entry['data']
-        
         try:
             params = {
                 'symbol': ticker,
-                'token': FINNHUB_API_KEY
+                'token': FINNHUB_KEY
             }
             url = "https://finnhub.io/api/v1/stock/profile2"
-            
             response = requests.get(url, params=params)
             response.raise_for_status()
             data = response.json()
-            
             if not data:
                 raise StockAPIError(f"No company information found for ticker: {ticker}")
             
@@ -530,9 +533,7 @@ class StockAPI:
                     'timestamp': time.time(),
                     'data': data
                 }
-            
             return data
-        
         except requests.exceptions.RequestException as e:
             error_message = str(e)
             if hasattr(e, 'response') and e.response:
@@ -540,7 +541,6 @@ class StockAPI:
                     error_message = f"Company information not found for ticker: {ticker}"
                 elif e.response.status_code == 429:
                     error_message = "Rate limit exceeded for Finnhub API. Please try again later."
-            
             raise StockAPIError(f"Failed to fetch company information: {error_message}")
         except Exception as e:
             raise StockAPIError(f"Error retrieving company information: {str(e)}")
@@ -555,42 +555,57 @@ class StockAPI:
             if time.time() - cache_entry['timestamp'] < self.cache_ttl:
                 logging.info(f"Using cached financial metrics for {ticker}")
                 return cache_entry['data']
-        
         try:
             params = {
                 'symbol': ticker,
                 'metric': 'all',
-                'token': FINNHUB_API_KEY
+                'token': FINNHUB_KEY
             }
             url = "https://finnhub.io/api/v1/stock/metric"
-            
-            response = requests.get(url, params=params)
-            response.raise_for_status()
+            response = execute_finnhub_request(
+                requests.get, 
+                url, 
+                params=params
+            )
+            if not response.ok:
+                logging.warning(f"Metrics API returned status code {response.status_code} for {ticker}")
+                response.raise_for_status()
             data = response.json()
-            
             if not data or 'metric' not in data:
-                raise StockAPIError(f"No financial metrics found for ticker: {ticker}")
-            
+                logging.warning(f"No financial metrics found for ticker: {ticker}")
+                # Return minimal structure instead of raising exception
+                return {
+                    "metric": {
+                        "peNormalizedAnnual": None,
+                        "peTTM": None,
+                        "pbAnnual": None,
+                        "psTTM": None,
+                        "dividendYieldIndicatedAnnual": None,
+                        "52WeekHigh": None,
+                        "52WeekLow": None
+                    }
+                }
             # Cache the result
             if use_cache:
                 self.cache[cache_key] = {
                     'timestamp': time.time(),
                     'data': data
                 }
-            
             return data
-        
-        except requests.exceptions.RequestException as e:
-            error_message = str(e)
-            if hasattr(e, 'response') and e.response:
-                if e.response.status_code == 404:
-                    error_message = f"Financial metrics not found for ticker: {ticker}"
-                elif e.response.status_code == 429:
-                    error_message = "Rate limit exceeded for Finnhub API. Please try again later."
-            
-            raise StockAPIError(f"Failed to fetch financial metrics: {error_message}")
         except Exception as e:
-            raise StockAPIError(f"Error retrieving financial metrics: {str(e)}")
+            logging.error(f"Error retrieving financial metrics for {ticker}: {e}")
+            # Return a minimal data structure instead of raising exception
+            return {
+                "metric": {
+                    "peNormalizedAnnual": None,
+                    "peTTM": None,
+                    "pbAnnual": None,
+                    "psTTM": None,
+                    "dividendYieldIndicatedAnnual": None,
+                    "52WeekHigh": None,
+                    "52WeekLow": None
+                }
+            }
 
 class AIClient:
     def __init__(self, model=OLLAMA_MODEL, request_counter=None, max_requests_per_minute=10):
@@ -604,7 +619,6 @@ class AIClient:
     def _ensure_model_available(self, model_name: str) -> None:
         """
         Ensure the model is available locally, pull if not.
-        
         Args:
             model_name (str): Name of the Ollama model to check/pull
         """
@@ -651,7 +665,6 @@ class AIClient:
         """Analyzes the given prompt using the specified AI model with rate limiting"""
         model_to_use = model or self.default_model
         self._ensure_model_available(model_to_use)
-        
         messages = [
             {
                 'role': 'system',
@@ -662,9 +675,7 @@ class AIClient:
                 'content': prompt
             }
         ]
-        
         logging.info(f"Requesting AI analysis for role: {role}")
-        
         # Try with retries in case of failure
         last_error = None
         for attempt in range(retries + 1):
@@ -674,7 +685,6 @@ class AIClient:
                     wait_time = backoff_factor * (2 ** (attempt - 1))  # Start with backoff_factor seconds
                     logging.warning(f"Retry attempt {attempt}/{retries}. Waiting {wait_time}s...")
                     time.sleep(wait_time)
-                
                 # Execute with rate limiting
                 response = execute_ollama_request(
                     self._execute_ollama_request,
@@ -682,12 +692,10 @@ class AIClient:
                     messages
                 )
                 return response
-            
             except Exception as e:
                 logging.error(f"AI attempt {attempt+1}/{retries+1} failed: {e}")
                 last_error = e
                 # Continue to next retry
-        
         # If we got here, all retries failed
         error_message = str(last_error) if last_error else "Unknown error"
         return {

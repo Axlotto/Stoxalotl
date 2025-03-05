@@ -6,6 +6,7 @@ import time
 import logging
 import traceback
 import fix_missing_methods
+from fix_missing_methods import safe_widget_call
 
 # Set up exception handling to capture all errors
 def global_exception_handler(exctype, value, tb):
@@ -212,7 +213,7 @@ class ModernStockApp(QMainWindow):
                 background-color: {theme['background']};
                 color: {theme['text']};
             }}
-            /* Add other styles from original implementation */
+            /* Check for any hardcoded colors like #BB that might be incomplete */
         """)
 
         # Apply the selected font family
@@ -270,12 +271,12 @@ class ModernStockApp(QMainWindow):
         header_layout.setSpacing(0)  # Remove default spacing
 
         # Logo/Brand section (left side)
-        brand_label = QLabel("Stoxalotl")
-        brand_label.setFont(QFont(FONT_FAMILY, 18, QFont.Bold))
-        brand_label.setStyleSheet(f"color: {COLOR_PALETTES['Dark']['primary']};")
+        self.brand_label = QLabel("Stoxalotl")
+        self.brand_label.setFont(QFont(FONT_FAMILY, 18, QFont.Bold))
+        self.brand_label.setStyleSheet(f"color: {COLOR_PALETTES['Dark']['primary']};")
         
         # Add brand label
-        header_layout.addWidget(brand_label)
+        header_layout.addWidget(self.brand_label)
         
         # Add stretch to push everything else to the right
         header_layout.addStretch(1)
@@ -423,14 +424,31 @@ class ModernStockApp(QMainWindow):
                     # Get the signal object
                     signal = getattr(obj, signal_name)
                     
+                    # Check if the signal object exists and is actually a signal
+                    if signal is None:
+                        logging.debug(f"Signal {signal_name} is None on {obj}")
+                        return
+                        
                     # Check if there are any connections
                     if hasattr(signal, 'disconnect'):
                         if slot is None:
-                            # Disconnect all connections if no specific slot provided
-                            signal.disconnect()
+                            # Check if we have any connections before trying to disconnect all
+                            try:
+                                # PySide6-specific way to check if signal is connected
+                                if not getattr(signal, 'receivers', []):
+                                    return  # No connections to disconnect
+                                # Disconnect all connections if no specific slot provided
+                                signal.disconnect()
+                            except TypeError:
+                                # This means there were no connections
+                                pass
                         else:
-                            # Disconnect specific slot
-                            signal.disconnect(slot)
+                            # Try to disconnect specific slot
+                            try:
+                                signal.disconnect(slot)
+                            except TypeError:
+                                # This means the slot wasn't connected
+                                pass
             except (TypeError, RuntimeError) as e:
                 # This is normal if the signal was not connected
                 logging.debug(f"Signal disconnect information: {e}")
@@ -485,9 +503,9 @@ class ModernStockApp(QMainWindow):
         layout.setSpacing(20)
 
         # Market News Section
-        news_label = QLabel("Market News")
-        news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        layout.addWidget(news_label)
+        self.news_label = QLabel("Market News")
+        self.news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        layout.addWidget(self.news_label)
 
         self.news_feed = QTextEdit()
         self.news_feed.setReadOnly(True)
@@ -495,10 +513,10 @@ class ModernStockApp(QMainWindow):
         layout.addWidget(self.news_feed)
 
         # Recently Viewed Section - Redesigned without grey background
-        recent_label = QLabel("Recently Viewed")
-        recent_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        recent_label.setStyleSheet("margin-top: 10px;")  # Add some margin above
-        layout.addWidget(recent_label)
+        self.recent_label = QLabel("Recently Viewed")
+        self.recent_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        self.recent_label.setStyleSheet("margin-top: 10px;")  # Add some margin above
+        layout.addWidget(self.recent_label)
 
         # Create a simple container without scroll area
         recent_container = QWidget()
@@ -517,9 +535,9 @@ class ModernStockApp(QMainWindow):
         self.recent_content = recent_container
 
         # Market Analysis Section
-        market_analysis_label = QLabel("Market Analysis")
-        market_analysis_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        layout.addWidget(market_analysis_label)
+        self.market_analysis_label = QLabel("Market Analysis")
+        self.market_analysis_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        layout.addWidget(self.market_analysis_label)
 
         self.market_analysis = QTextEdit()
         self.market_analysis.setReadOnly(True)
@@ -976,7 +994,7 @@ class ModernStockApp(QMainWindow):
         try:
             # Show loading indicators
             if hasattr(self, 'overview') and hasattr(self.overview, 'show_loading'):
-                self.overview.show_loading()
+                safe_widget_call(self.overview, 'show_loading')
             
             current_time = time.time()
             refresh_needed = False
@@ -1011,18 +1029,24 @@ class ModernStockApp(QMainWindow):
                 change_text = f"{change_amount:+.2f} ({change_percent:+.2f}%)"
 
                 # Update overview with all information including favorite status
-                self.overview.update_overview(
-                    self.current_ticker,
-                    current_price,
-                    change_text
-                )
+                safe_widget_call(self.overview, 'update_overview', self.current_ticker, current_price, change_text)
                 
-                # Update metrics
-                metrics = self._get_stock_metrics(stock_data)
-                self.metrics.update_metrics(metrics)
+                # Update metrics - with additional logging
+                logging.info(f"Getting stock metrics for {self.current_ticker}...")
+                metrics = self._get_stock_metrics(self.current_ticker)  # Pass ticker directly, not stock data
+                
+                # Log metrics data to help debug
+                logging.info(f"Got metrics data: {metrics}")
+                
+                # Update the metrics widget with the data
+                if metrics and hasattr(self, 'metrics'):
+                    logging.info("Updating metrics widget with data")
+                    safe_widget_call(self.metrics, 'update_metrics', metrics)
+                else:
+                    logging.error("Failed to update metrics - no data or widget")
                 
                 # Update profit target
-                self.profit_target.update_profit_target(current_price)
+                safe_widget_call(self.profit_target, 'update_profit_target', current_price)
                 
                 # Mark that UI has been updated at least once
                 self._ui_updated = True
@@ -1400,13 +1424,41 @@ class ModernStockApp(QMainWindow):
 
     def closeEvent(self, event):
         """Clean up resources when closing the application"""
-        # Stop all timers
-        if hasattr(self, 'update_timer'):
-            self.update_timer.stop()
-        if hasattr(self, 'rate_limit_timer'):
-            self.rate_limit_timer.stop()
-        if hasattr(self, 'request_timer'):
-            self.request_timer.stop()
+        # Disconnect signals to avoid referencing deleted objects
+        if hasattr(self, 'debounce_timer'):
+            try:
+                self.debounce_timer.timeout.disconnect()
+            except (TypeError, RuntimeError):
+                pass  # Already disconnected or invalid
+            self.debounce_timer.deleteLater()
+        
+        # Stop all timers first - important to do this before deleting widgets
+        timers = ['update_timer', 'rate_limit_timer', 'request_timer']
+        for timer_name in timers:
+            if hasattr(self, timer_name):
+                timer = getattr(self, timer_name)
+                if timer:
+                    timer.stop()
+        
+        # Clear reference to widgets that might be accessed during shutdown
+        # Store widget names to safely delete
+        widgets_to_cleanup = [
+            'label_status', 'overview', 'metrics', 'ai_recommendation', 
+            'profit_target', 'news_card', 'long_term_card', 'day_trade_card', 
+            'strategy_card', 'chat_history', 'chart'
+        ]
+        
+        # Clean up each widget reference
+        for widget_name in widgets_to_cleanup:
+            if hasattr(self, widget_name):
+                widget = getattr(self, widget_name)
+                if widget is not None:
+                    try:
+                        # Set the attribute to None first to avoid further references
+                        setattr(self, widget_name, None)
+                    except:
+                        pass
+        
         # Shut down all request queues
         try:
             shutdown_all()
@@ -1487,18 +1539,45 @@ class ModernStockApp(QMainWindow):
             logging.error(f"Error in news feed function: {e}")
             self.news_feed.setPlainText(f"Unable to load news: {str(e)}")
 
-    def _get_stock_metrics(self, ticker):
-        """Get financial metrics for a stock"""
+    def _get_stock_metrics(self, data_or_ticker):
+        """
+        Get financial metrics for a stock
+        
+        Args:
+            data_or_ticker: Either a stock data dictionary or ticker symbol string
+        
+        Returns:
+            Dictionary containing financial metrics data
+        """
         try:
-            if not hasattr(self, 'stock_api') or not self.stock_api:
-                logging.error("Stock API not initialized!")
-                raise ValueError("Stock API not initialized")
+            # Check if we were passed stock data or a ticker string
+            if isinstance(data_or_ticker, dict):
+                # Extract ticker from cached data
+                # Note: Finnhub doesn't include ticker in quote response
+                # so we need to use our current_ticker
+                ticker = self.current_ticker
+            else:
+                # Use the ticker string directly
+                ticker = data_or_ticker
+            logging.info(f"Getting financial metrics for {ticker}")
             
-            return self.stock_api.get_financial_metrics(ticker)
+            if not hasattr(self, 'stock_api') or self.stock_api is None:
+                logging.error("Stock API not initialized")
+                return None
+                
+            # Make the API call to get metrics
+            metrics = self.stock_api.get_financial_metrics(ticker)
+            
+            # Log successful retrieval
+            if metrics and isinstance(metrics, dict) and 'metric' in metrics:
+                logging.info(f"Successfully retrieved metrics for {ticker}")
+            else:
+                logging.warning(f"Retrieved empty or invalid metrics for {ticker}")
+                
+            return metrics
+            
         except Exception as e:
-            logging.error(f"Error fetching stock metrics for {ticker}: {e}")
-            
-            # Return fallback data structure
+            logging.error(f"Error in _get_stock_metrics: {e}")
             return {
                 "metric": {
                     "peNormalizedAnnual": None,

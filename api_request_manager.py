@@ -3,6 +3,7 @@ import threading
 import queue
 import logging
 from typing import Any, Callable, Dict, Tuple
+from datetime import datetime, timedelta
 
 class ApiRequestManager:
     """
@@ -97,3 +98,9 @@ class ApiRequestManager:
             except Exception as e:
                 logging.error(f"Error in request queue processing: {e}")
                 time.sleep(1)  # Avoid tight loop in case of persistent errors
+
+end_date = datetime.now()
+start_date = end_date - timedelta(days=30)
+
+# Example usage:
+# request_url = f"...?from={start_date.strftime('%Y-%m-%d')}&to={end_date.strftime('%Y-%m-%d')}"
