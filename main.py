@@ -33,7 +33,7 @@ logging.basicConfig(
 logging.info("Application starting")
 
 from datetime import datetime, timedelta
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QPropertyAnimation, QEasingCurve, QPoint
+from PySide6.QtCore import Qt, QTimer, Signal, QThread, QSettings, QPropertyAnimation, QEasingCurve, QPoint, QSize
 from PySide6.QtGui import QFont, QColor, QPixmap, QIcon, QTextCursor, QAction  # Move QAction to QtGui import
 from PySide6.QtWidgets import (
     QApplication,
@@ -68,7 +68,7 @@ from request_counter import RequestCounter
 
 # Check numpy version
 try:
-    if np.__version__ >= '1.24':
+    if (np.__version__ >= '1.24'):
         print("Warning: It's recommended to use numpy<1.24 with pyqtgraph. Consider downgrading.")
 except:
     pass
@@ -199,6 +199,9 @@ class ModernStockApp(QMainWindow):
             self._create_settings_page()
             self._create_ui_settings_page()
 
+            # Add a persistent dialog for showing maximized cards
+            self._create_persistent_dialog()
+
         except Exception as e:
             # Log any initialization errors
             logging.critical(f"Initialization error: {str(e)}")
@@ -281,23 +284,24 @@ class ModernStockApp(QMainWindow):
         header_layout.setContentsMargins(24, 0, 24, 0)  # Added right padding for symmetry
         header_layout.setSpacing(0)  # Remove default spacing
 
-        # Logo/Brand section (left side)
-        # Replace QLabel with QPushButton for dropdown functionality
-        self.brand_button = QPushButton("Stoxalotl")
-        self.brand_button.setFont(QFont(FONT_FAMILY, 18, QFont.Bold))
-        self.brand_button.setStyleSheet(f"""
-            QPushButton {{
-                color: {COLOR_PALETTES['Dark']['primary']};
+        # Settings button (replacing the text brand button)
+        self.brand_button = QPushButton()  # Empty button without text
+        self.brand_button.setIcon(self.app_icon)  # Use app icon instead
+        self.brand_button.setIconSize(QSize(64, 64))  # Increased from 24x24 to 32x32
+        self.brand_button.setFixedSize(40, 40)  # Increased from 32x32 to 40x40
+        self.brand_button.setStyleSheet("""
+            QPushButton {
                 background-color: transparent;
                 border: none;
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                color: #A370E0;
-            }}
+            }
+            QPushButton:hover {
+                background-color: #333333;
+                border-radius: 4px;
+            }
         """)
         self.brand_button.setCursor(Qt.PointingHandCursor)
         self.brand_button.clicked.connect(self._show_settings_menu)
+        self.brand_button.setToolTip("Settings")
         
         # Add brand button
         header_layout.addWidget(self.brand_button)
@@ -322,8 +326,7 @@ class ModernStockApp(QMainWindow):
         else:
             # Fallback if icon not found - use text "🏠" as unicode home symbol
             self.btn_home.setText("🏠")
-            
-            
+        
         self.btn_home.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
@@ -337,7 +340,7 @@ class ModernStockApp(QMainWindow):
         self.btn_home.setToolTip("Return to Home")
         self.btn_home.hide()  # Hidden by default until needed
         self.btn_home.clicked.connect(self._return_home)
-
+        
         # Create search container
         search_container = QWidget()
         search_layout = QHBoxLayout(search_container)
@@ -367,13 +370,13 @@ class ModernStockApp(QMainWindow):
                 border-right: none; /* Keep right border removed even when focused */
             }
         """)
-
-        # Analyze button with styling to connect with search bar - update color to match logo
+        
+        # Analyze button with styling to connect with search bar - update color to match theme
         self.btn_analyze = QPushButton("Analyze")
         self.btn_analyze.setFixedSize(90, 32)
         self.btn_analyze.setStyleSheet(f"""
             QPushButton {{
-                background-color: {COLOR_PALETTES['Dark']['primary']};  /* Match Stoxalotl logo purple */
+                background-color: {COLOR_PALETTES['Dark']['primary']};
                 color: white;
                 border: none;
                 border-top-left-radius: 0px;
@@ -384,14 +387,14 @@ class ModernStockApp(QMainWindow):
                 padding: 0 10px;
             }}
             QPushButton:hover {{
-                background-color: #A370E0;  /* Slightly different shade for hover */
+                background-color: #A370E0;
             }}
             QPushButton:pressed {{
-                background-color: {COLOR_PALETTES['Dark']['secondary']};  /* Secondary color for press state */
+                background-color: {COLOR_PALETTES['Dark']['secondary']};
             }}
         """)
         self.btn_analyze.clicked.connect(self._analyze)
-
+        
         # Add search and analyze button to search layout
         search_layout.addWidget(self.search)
         search_layout.addWidget(self.btn_analyze)
@@ -432,7 +435,6 @@ class ModernStockApp(QMainWindow):
             normalized = normalize_ticker(search_text)
             # Only check for invalid tickers - don't validate with API yet
             _, is_valid, suggestion = validate_ticker(normalized)
-            
             if not is_valid and suggestion:
                 # Show suggestion in a non-intrusive way (status bar)
                 self.statusBar().showMessage(f"Did you mean {suggestion}?", 3000)
@@ -448,12 +450,10 @@ class ModernStockApp(QMainWindow):
                 if hasattr(obj, signal_name):
                     # Get the signal object
                     signal = getattr(obj, signal_name)
-                    
                     # Check if the signal object exists and is actually a signal
                     if signal is None:
                         logging.debug(f"Signal {signal_name} is None on {obj}")
                         return
-                        
                     # Check if there are any connections
                     if hasattr(signal, 'disconnect'):
                         if slot is None:
@@ -480,7 +480,7 @@ class ModernStockApp(QMainWindow):
             except Exception as e:
                 # Log other errors but don't crash
                 logging.warning(f"Unexpected error during signal disconnect: {e}")
-        
+
         # Completely disconnect ALL existing signals first
         safe_disconnect(self.search, 'returnPressed')
         safe_disconnect(self.btn_analyze, 'clicked')
@@ -488,9 +488,9 @@ class ModernStockApp(QMainWindow):
         safe_disconnect(self.send_button, 'clicked')
         safe_disconnect(self.search, 'textChanged')
         safe_disconnect(self.chat_input, 'returnPressed')  # Ensure chat input return is also disconnected
-        
+
         # Disconnect card signals - make sure we're accessing the signal name correctly
-        for card_name in ['strategy_card', 'news_card', 'long_term_card', 'day_trade_card']:
+        for card_name in ['strategy_card', 'news_card', 'long_term_card']:  # Removed 'day_trade_card'
             if hasattr(self, card_name):
                 card = getattr(self, card_name)
                 if hasattr(card, 'maximize_signal'):
@@ -498,28 +498,28 @@ class ModernStockApp(QMainWindow):
                         safe_disconnect(card, 'maximize_signal')
                     except Exception as e:
                         logging.debug(f"Error disconnecting maximize_signal from {card_name}: {e}")
-        
+
         # Now connect signals once with try/except for each connection to prevent duplicates
         try:
             self.search.returnPressed.connect(self._analyze)
             logging.debug("Connected search.returnPressed to _analyze")
         except Exception as e:
             logging.error(f"Failed to connect search.returnPressed: {e}")
-            
+
         try:
             self.btn_analyze.clicked.connect(self._analyze)
             logging.debug("Connected btn_analyze.clicked to _analyze")
         except Exception as e:
             logging.error(f"Failed to connect btn_analyze.clicked: {e}")
-            
+
         try:
             self.btn_home.clicked.connect(self._return_home)
             logging.debug("Connected btn_home.clicked to _return_home")
         except Exception as e:
             logging.error(f"Failed to connect btn_home.clicked: {e}")
-        
+
         # Connect card signals with existence checks and better error handling
-        for card_name in ['strategy_card', 'news_card', 'long_term_card', 'day_trade_card']:
+        for card_name in ['strategy_card', 'news_card', 'long_term_card']:  # Removed 'day_trade_card'
             if hasattr(self, card_name):
                 card = getattr(self, card_name)
                 if hasattr(card, 'maximize_signal'):
@@ -528,26 +528,26 @@ class ModernStockApp(QMainWindow):
                         card.maximize_signal.connect(self._show_maximized_card)
                     except Exception as e:
                         logging.error(f"Failed to connect maximize_signal for {card_name}: {e}")
-        
+
         # Connect chat message input signals
         try:
             self.send_button.clicked.connect(self._send_chat_message)
             logging.debug("Connected send_button.clicked to _send_chat_message")
         except Exception as e:
             logging.error(f"Failed to connect send_button.clicked: {e}")
-            
+
         try:
             self.chat_input.returnPressed.connect(self._send_chat_message)
             logging.debug("Connected chat_input.returnPressed to _send_chat_message")
         except Exception as e:
             logging.error(f"Failed to connect chat_input.returnPressed: {e}")
-        
+
         try:
             self.search.textChanged.connect(self._on_search_text_changed)
             logging.debug("Connected search.textChanged to _on_search_text_changed")
         except Exception as e:
             logging.error(f"Failed to connect search.textChanged: {e}")
-        
+
         # Set up debounce timer if not already
         if not hasattr(self, 'search_debounce_timer'):
             self.search_debounce_timer = QTimer(self)
@@ -564,7 +564,6 @@ class ModernStockApp(QMainWindow):
         self.news_label = QLabel("Market News")
         self.news_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(self.news_label)
-
         self.news_feed = QTextEdit()
         self.news_feed.setReadOnly(True)
         self.news_feed.setMaximumHeight(200)
@@ -579,16 +578,16 @@ class ModernStockApp(QMainWindow):
         # Create a simple container without scroll area
         recent_container = QWidget()
         recent_container.setMaximumHeight(100)  # Reduced height from 150 to 100
-        
+
         # Use a flow layout (horizontal with wrapping) for the cards
         self.recent_layout = QHBoxLayout(recent_container)
         self.recent_layout.setContentsMargins(0, 0, 0, 0)  # No margins
         self.recent_layout.setSpacing(10)  # Space between cards
         self.recent_layout.setAlignment(Qt.AlignLeft)  # Align left
-        
+
         # Add the container directly to main layout
         layout.addWidget(recent_container)
-        
+
         # Store reference to container for updates
         self.recent_content = recent_container
 
@@ -596,11 +595,10 @@ class ModernStockApp(QMainWindow):
         self.market_analysis_label = QLabel("Market Analysis")
         self.market_analysis_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
         layout.addWidget(self.market_analysis_label)
-
         self.market_analysis = QTextEdit()
         self.market_analysis.setReadOnly(True)
         layout.addWidget(self.market_analysis)
-        
+
         # Initial data load
         self._load_news_feed()
         self._load_recent_tickers()
@@ -617,14 +615,12 @@ class ModernStockApp(QMainWindow):
                 info = stock.info
                 current_price = info.get('currentPrice', 'N/A')
                 name = info.get('displayName', index)
-
                 # Check if current_price is a number before formatting
                 if isinstance(current_price, (int, float)):
                     index_label = QLabel(f"{name}: ${current_price:.2f}")
                 else:
                     index_label = QLabel(f"{name}: {current_price}")  # Display as is
                 self.market_overview_layout.addWidget(index_label)
-            
             # Fetch and process news
             all_news = self.stock_api.get_market_news()  # Assuming this method exists
             news_text = "\n\n".join(
@@ -644,7 +640,7 @@ class ModernStockApp(QMainWindow):
         # Left sidebar
         sidebar = QWidget()
         sidebar_layout = QVBoxLayout(sidebar)
-        
+
         # Add existing widgets (removed btn_add_favorite)
         self.overview = StockOverview()
         self.metrics = KeyMetrics()
@@ -654,25 +650,23 @@ class ModernStockApp(QMainWindow):
         # Add chat section
         chat_container = QWidget()
         chat_layout = QVBoxLayout(chat_container)
-        
+
         # Chat history
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
         self.chat_history.setMinimumHeight(200)
         self.chat_history.setPlaceholderText("Chat with AI Assistant...")
-        
+
         # Input area
         input_container = QHBoxLayout()
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText("Ask about the current stock...")
         self.chat_input.returnPressed.connect(self._send_chat_message)
-        
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self._send_chat_message)
-        
         input_container.addWidget(self.chat_input)
         input_container.addWidget(self.send_button)
-        
+
         # Add all to chat layout
         chat_layout.addWidget(self.chat_history)
         chat_layout.addLayout(input_container)
@@ -694,7 +688,7 @@ class ModernStockApp(QMainWindow):
         analysis_tab = QWidget()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        
+
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -703,18 +697,17 @@ class ModernStockApp(QMainWindow):
         # Create cards with explicit connections to maximize signal
         self.news_card = AnalysisCard("Latest News")
         self.news_card.maximize_signal.connect(self._show_maximized_card)
-        
+
         self.long_term_card = AnalysisCard("Buy/Sell Analysis")
         self.long_term_card.maximize_signal.connect(self._show_maximized_card)
-        
-        self.day_trade_card = AnalysisCard("Day Trading Analysis")
-        self.day_trade_card.maximize_signal.connect(self._show_maximized_card)
-        
+
+        # Removed day_trade_card
+
         self.strategy_card = AnalysisCard("Investment Strategy")
         self.strategy_card.maximize_signal.connect(self._show_maximized_card)
 
         # Add cursor to indicate clickability and add to layout
-        for card in [self.news_card, self.long_term_card, self.day_trade_card, self.strategy_card]:
+        for card in [self.news_card, self.long_term_card, self.strategy_card]:  # Removed day_trade_card from list
             card.setCursor(Qt.PointingHandCursor)  # Show hand cursor to indicate clickable
             card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             layout.addWidget(card)
@@ -722,15 +715,15 @@ class ModernStockApp(QMainWindow):
         # Set initial content with HTML formatting
         self.news_card.content.setHtml("<i>Search for a stock to view news...</i>")
         self.long_term_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
-        self.day_trade_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
+        # Removed day_trade_card HTML initialization
         self.strategy_card.content.setHtml("<i>Search for a stock to view analysis...</i>")
 
         # Add stretch to push cards to the top
         layout.addStretch()
-        
+
         # Complete the scroll area setup
         scroll.setWidget(content)
-        
+
         # Create a layout for the tab itself
         tab_layout = QVBoxLayout(analysis_tab)
         tab_layout.setContentsMargins(0, 0, 0, 0)
@@ -742,22 +735,22 @@ class ModernStockApp(QMainWindow):
     def _create_chart_tab(self):
         chart_page = QWidget()
         layout = QVBoxLayout(chart_page)
-        
+
         # Controls
         controls = QHBoxLayout()
-        
+
         # Time frame selector
         self.time_frame = QComboBox()
         self.time_frame.addItems(["1D", "1W", "1M", "3M", "6M", "1Y", "5Y"])
         self.time_frame.setCurrentText("3M")
         self.time_frame.currentTextChanged.connect(self._update_chart)
-        
+
         # Chart type selector
         self.chart_type = QComboBox()
         self.chart_type.addItems(["Line", "Candlestick", "Both"])
         self.chart_type.setCurrentText("Both")
         self.chart_type.currentTextChanged.connect(self._update_chart)
-        
+
         # Add control widgets
         controls.addWidget(QLabel("Time Frame:"))
         controls.addWidget(self.time_frame)
@@ -767,11 +760,11 @@ class ModernStockApp(QMainWindow):
 
         # Create chart
         self.chart = StockChart()
-        
+
         # Add to layout
         layout.addLayout(controls)
         layout.addWidget(self.chart)
-        
+
         self.tabs.addTab(chart_page, "Charts")
 
     def _update_chart(self):
@@ -779,7 +772,7 @@ class ModernStockApp(QMainWindow):
             try:
                 # Make sure we have valid data
                 logging.info(f"Updating chart for {self.current_ticker}")
-                
+
                 # Try to safe guard against errors
                 try:
                     time_frame = self.time_frame.currentText()
@@ -788,17 +781,17 @@ class ModernStockApp(QMainWindow):
                     # If the combo boxes are not available, use defaults
                     time_frame = "3M"
                     chart_type = "Both"
-                
+
                 # Log important info before calling chart update
                 logging.info(f"Chart update with ticker={self.current_ticker}, time_frame={time_frame}, type={chart_type}")
-                
+
                 # Use a try-except block to catch specific errors
                 try:
                     # Update the chart in one place only
                     self.chart.update_chart(
                         self.current_ticker,
                         time_frame,
-                        chart_type
+                        chart_type,
                     )
                     logging.info("Chart update method called successfully")
                 except Exception as chart_error:
@@ -847,7 +840,6 @@ class ModernStockApp(QMainWindow):
             # Set fixed size for the card - smaller than before
             card.setFixedSize(100, 70)
             container_layout.addWidget(card)
-
         except Exception as e:
             print(f"Error creating stock card for {ticker}: {e}")
 
@@ -857,7 +849,7 @@ class ModernStockApp(QMainWindow):
             widget = self.recent_layout.itemAt(i).widget()
             if widget:
                 widget.deleteLater()
-        
+
         if not self.recent_tickers:
             # Add a placeholder message if no recent tickers
             placeholder = QLabel("No recently viewed stocks. Search for a ticker to begin.")
@@ -871,7 +863,6 @@ class ModernStockApp(QMainWindow):
                 stock_data = self.stock_api.get_stock(ticker)
                 current_price = stock_data['c']
                 prev_close = stock_data['pc']
-
                 self._create_stock_card(ticker, current_price, prev_close, self.recent_layout)
             except StockAPIError as e:
                 print(f"Error loading recent stock {ticker}: {e}")
@@ -890,12 +881,10 @@ class ModernStockApp(QMainWindow):
         - Sector name 1: Brief reason
         - Sector name 2: Brief reason
         - Sector name 3: Brief reason
-
         DOWNTREND SECTORS:
         - Sector name 1: Brief reason
         - Sector name 2: Brief reason
         - Sector name 3: Brief reason
-
         Base your analysis on current market conditions, recent economic data, and sector performance.
         Be specific and concise with each sector.
         """
@@ -904,7 +893,7 @@ class ModernStockApp(QMainWindow):
             response = self.ai_client.analyze(prompt, "sector analyst")
             content = response['message']['content']
             cleaned_content = remove_think_tags(content)
-            
+
             # Clear existing text
             self.market_analysis.clear()
 
@@ -929,7 +918,6 @@ class ModernStockApp(QMainWindow):
 
                 # Insert text with format
                 cursor.insertText(section + "\n\n")
-
         except Exception as e:
             print(f"Market analysis error: {str(e)}")  # Debug print
             self.market_analysis.setPlainText(f"Error generating market analysis: {str(e)}")
@@ -939,22 +927,21 @@ class ModernStockApp(QMainWindow):
         if self.analysis_in_progress:
             logging.info("Analysis already in progress, ignoring duplicate request")
             return
-            
+
         raw_ticker = self.search.text().strip().upper()
-        
         if not raw_ticker:
             self._show_error("Please enter a stock ticker")
             return
-        
+
         # Add ticker validation and normalization
         ticker, is_valid, suggestion = validate_ticker(raw_ticker)
-        
+
         # Handle invalid ticker with suggestion if available
         if not is_valid:
             suggestion_msg = f" Did you mean {suggestion}?" if suggestion else ""
             self._show_error(f"Invalid ticker symbol: {raw_ticker}.{suggestion_msg}")
             return
-            
+
         # Set the flag to prevent duplicate processing
         self.analysis_in_progress = True
 
@@ -965,7 +952,7 @@ class ModernStockApp(QMainWindow):
         try:
             # Update current_ticker ONLY after validation
             self.current_ticker = ticker
-            
+
             # Update recent tickers list with validated ticker
             if (ticker in self.recent_tickers):
                 self.recent_tickers.remove(ticker)
@@ -976,11 +963,11 @@ class ModernStockApp(QMainWindow):
             # Clear cache for previous searches that aren't the current ticker
             # This ensures we don't reuse cached data from different symbols
             self._clear_irrelevant_cache(ticker)
-            
+
             # Get stock data first and store in cache with properly namespaced key
             logging.info(f"Requesting fresh data for ticker: {ticker}")
             stock = self.stock_api.get_stock(ticker, use_cache=False)  # Force fresh data for new searches
-            
+
             # Store in cache with proper cache key that includes the ticker
             cache_key = f"stock_data_{ticker}"
             self.stock_data_cache[cache_key] = stock
@@ -990,11 +977,10 @@ class ModernStockApp(QMainWindow):
             self.stacked_widget.setCurrentIndex(1)
             self.btn_home.show()
             self.update_timer.start()
-            
+
             # Show loading placeholders
             self.news_card.content.setPlainText("Loading news...")
             self.long_term_card.content.setPlainText("Loading analysis...")
-            self.day_trade_card.content.setPlainText("Loading analysis...")
             self.strategy_card.content.setPlainText("Loading analysis...")
 
             # Update UI with stock data
@@ -1003,11 +989,11 @@ class ModernStockApp(QMainWindow):
             # Load news in background (doesn't use LLM)
             QApplication.processEvents()
             self._update_news(ticker)
-            
+
             # Update chart
             QApplication.processEvents()
             self._update_chart()
-            
+
             # Generate the AI analysis
             try:
                 self._generate_combined_analysis(stock)
@@ -1016,7 +1002,7 @@ class ModernStockApp(QMainWindow):
                 self.long_term_card.content.setPlainText(
                     f"Error generating analysis: {e}\n\nPlease try again later or use the chat feature to ask specific questions."
                 )
-            
+
             self.statusBar().showMessage(f"Analysis of {ticker} complete", 3000)
         except StockAPIError as e:
             logging.error(f"Error analyzing stock {ticker}: {e}")
@@ -1041,7 +1027,7 @@ class ModernStockApp(QMainWindow):
 
         # Collect keys to delete (to avoid modifying dict during iteration)
         keys_to_delete = []
-        
+
         # Check stock data cache
         for cache_key in self.stock_data_cache.keys():
             # Only keep cache entries related to current ticker
@@ -1064,18 +1050,17 @@ class ModernStockApp(QMainWindow):
             # Show loading indicators
             if hasattr(self, 'overview') and hasattr(self.overview, 'show_loading'):
                 safe_widget_call(self.overview, 'show_loading')
-            
+
             current_time = time.time()
             refresh_needed = False
 
             # Use proper cache key that includes ticker
             cache_key = f"stock_data_{self.current_ticker}"
-            
+
             # Check if stock data needs to be refreshed
             if (cache_key not in self.stock_data_cache or
                 cache_key not in self.last_stock_update or
                 (current_time - self.last_stock_update[cache_key]) > self.stock_cache_ttl):
-                
                 # Only make API call when cache is expired
                 logging.info(f"Cache expired or not found for {self.current_ticker}, refreshing stock data")
                 stock_data = self.stock_api.get_stock(self.current_ticker)
@@ -1086,11 +1071,12 @@ class ModernStockApp(QMainWindow):
                 # Use cached data
                 stock_data = self.stock_data_cache[cache_key]
                 logging.debug(f"Using cached stock data for {self.current_ticker} from key: {cache_key}")
-            
+
             # Only update UI elements if data was refreshed or this is the first update cycle
             if refresh_needed or not hasattr(self, '_ui_updated'):
                 current_price = stock_data['c']
                 prev_close = stock_data['pc']
+
                 # Calculate price change
                 change_amount = current_price - prev_close
                 change_percent = (change_amount / prev_close) * 100 if prev_close != 0 else 0
@@ -1102,7 +1088,7 @@ class ModernStockApp(QMainWindow):
                 # Update metrics - with additional logging
                 logging.info(f"Getting stock metrics for {self.current_ticker}...")
                 metrics = self._get_stock_metrics(self.current_ticker)  # Pass ticker directly, not stock data
-                
+
                 # Log metrics data to help debugging
                 logging.info(f"Got metrics data: {metrics}")
 
@@ -1118,7 +1104,6 @@ class ModernStockApp(QMainWindow):
 
                 # Mark that UI has been updated at least once
                 self._ui_updated = True
-
         except StockAPIError as e:
             logging.error(f"Error updating UI for {self.current_ticker}: {e}")
             self._show_error(str(e))
@@ -1130,9 +1115,9 @@ class ModernStockApp(QMainWindow):
         """Format news items as HTML for better presentation"""
         if not news_items:
             return "<i>No news available.</i>"
-        
+
         html = "<div style='font-family: Segoe UI, sans-serif;'>"
-        
+
         for article in news_items:
             # Extract article data
             title = article.get('title', 'No Title')
@@ -1140,7 +1125,7 @@ class ModernStockApp(QMainWindow):
             source = article.get('source', {}).get('name', 'Unknown Source')
             date = article.get('formatted_date', article.get('publishedAt', ''))[:10]
             url = article.get('url', '#')
-            
+
             # Format as a nice HTML card
             html += f"""
             <div style='margin-bottom: 15px; padding: 10px; border-left: 3px solid #00bcd4; background-color: #1a1a1a;'>
@@ -1151,7 +1136,7 @@ class ModernStockApp(QMainWindow):
                 <p style='margin-bottom: 5px; color: #bdbdbd;'>{description}</p>
             </div>
             """
-        
+
         html += "</div>"
         return html
 
@@ -1160,14 +1145,14 @@ class ModernStockApp(QMainWindow):
             # Show loading state
             self.news_card.show_loading()
             QApplication.processEvents()
-            
+
             # Get news with proper error handling
             news = self.stock_api.get_news(ticker)
             QApplication.processEvents()
+
             # Format news as HTML and update the card
             html_content = self._format_news_html(news)
             self.news_card.content.setHtml(html_content)
-            
         except Exception as e:
             logging.error(f"Error updating news: {e}")
             self.news_card.content.setHtml(
@@ -1178,7 +1163,6 @@ class ModernStockApp(QMainWindow):
         try:
             # Show loading state
             self.long_term_card.content.setHtml("<i>Loading analysis...</i>")
-            self.day_trade_card.content.setHtml("<i>Loading analysis...</i>")
             self.strategy_card.content.setHtml("<i>Loading analysis...</i>")
             QApplication.processEvents()
 
@@ -1188,16 +1172,10 @@ class ModernStockApp(QMainWindow):
             - Current stock price: ${stock['c']}
             - Investment amount: $10000
             - Investment timeframe: 30 days
-
             Provide a detailed analysis covering potential growth factors, risks, and investment recommendations.
             Structure your response with clear sections:
-
             LONG-TERM ANALYSIS:
             [Your long-term analysis here, including bullet points for key factors]
-
-            DAY TRADING STRATEGY:
-            [Day trading analysis with technical indicators and entry/exit points]
-
             INVESTMENT RECOMMENDATION:
             [Clear step-by-step investment strategy with price targets]
             """
@@ -1206,62 +1184,52 @@ class ModernStockApp(QMainWindow):
             response = self.ai_client.analyze(
                 combined_prompt, 
                 "financial analyst", 
-                model=OLLAMA_MODEL, 
+                model=OLLAMA_MODEL,  
                 retries=3, 
                 backoff_factor=2.0
             )
-            
             content = response['message']['content']
             cleaned_content = remove_think_tags(content)
-                
+
             # Split the analysis based on headers
             try:
                 # Use regex to split on section headers
-                sections = re.split(r'(?:^|\n)\s*(LONG-TERM ANALYSIS:|DAY TRADING STRATEGY:|INVESTMENT RECOMMENDATION:)\s*(?:\n|$)', 
+                sections = re.split(r'(?:^|\n)\s*(LONG-TERM ANALYSIS:|INVESTMENT RECOMMENDATION:)\s*(?:\n|$)', 
                                 cleaned_content, flags=re.IGNORECASE)
-                
+
                 # Process the sections if we found them
                 if len(sections) >= 4:  # The first element is empty if the split was at the start
                     long_term = sections[2] if sections[1].strip().upper() == "LONG-TERM ANALYSIS:" else ""
-                    day_trading = sections[4] if len(sections) > 4 and sections[3].strip().upper() == "DAY TRADING STRATEGY:" else ""
-                    investment = sections[6] if len(sections) > 6 and sections[5].strip().upper() == "INVESTMENT RECOMMENDATION:" else ""
-                    
+                    investment = sections[4] if len(sections) > 4 and sections[3].strip().upper() == "INVESTMENT RECOMMENDATION:" else ""
+
                     # Apply rich formatting to each section
                     if long_term:
                         AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term, self.current_ticker)
                     else:
                         self.long_term_card.content.setPlainText("Could not extract long-term analysis.")
-                    
-                    if day_trading:
-                        AnalysisFormatter.apply_formatting_to_textedit(self.day_trade_card.content, day_trading, self.current_ticker)
-                    else:
-                        self.day_trade_card.content.setPlainText("Could not extract day trading strategy.")
-                    
+
                     if investment:
                         AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment, self.current_ticker)
                     else:
                         self.strategy_card.content.setPlainText("Could not extract investment recommendation.")
-                        
+
                     # Update recommendations based on the first section
                     self._update_recommendations(long_term)
                 else:
                     # Fallback to simpler division if regex doesn't work
                     sections = cleaned_content.split("\n\n")
-                    third = len(sections) // 3
-                    long_term_text = "\n\n".join(sections[:third])
-                    day_trading_text = "\n\n".join(sections[third:2*third])
-                    investment_text = "\n\n".join(sections[2*third:])
-                    
+                    half = len(sections) // 2  # Split into two parts instead of three
+                    long_term_text = "\n\n".join(sections[:half])
+                    investment_text = "\n\n".join(sections[half:])
+
                     AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term_text, self.current_ticker)
-                    AnalysisFormatter.apply_formatting_to_textedit(self.day_trade_card.content, day_trading_text, self.current_ticker)
                     AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment_text, self.current_ticker)
-                    
+
                     self._update_recommendations(long_term_text)
             except Exception as e:
                 logging.error(f"Error splitting analysis content: {e}")
                 # If formatting fails, fall back to plain text
                 self.long_term_card.content.setPlainText(cleaned_content)
-                self.day_trade_card.content.setPlainText("Error splitting analysis.")
                 self.strategy_card.content.setPlainText("Error splitting analysis.")
         except AIClientError as e:
             logging.error(f"Error generating combined analysis: {e}")
@@ -1279,60 +1247,64 @@ class ModernStockApp(QMainWindow):
         self.btn_home.hide()
         self.update_timer.stop()
 
-    def _show_maximized_card(self, card_data):
-        """Show a maximized view of the card content"""
-        # Added debugging to check incoming data
-        logging.info(f"Showing maximized card: {card_data.get('title', 'Unknown')}")
+    def _create_persistent_dialog(self):
+        """Create a persistent dialog that we'll reuse rather than create/destroy repeatedly"""
+        self.persistent_dialog = QDialog(self)
+        self.persistent_dialog.setWindowIcon(self.app_icon)
+        self.persistent_dialog.setMinimumSize(600, 400)
         
-        # Create a flag to prevent multiple dialogs from appearing
-        if hasattr(self, '_dialog_active') and self._dialog_active:
-            logging.info("Dialog already active, ignoring duplicate request")
+        # Setup dialog layout
+        layout = QVBoxLayout(self.persistent_dialog)
+        
+        # Create content area
+        self.dialog_content = QTextEdit()
+        self.dialog_content.setReadOnly(True)
+        layout.addWidget(self.dialog_content)
+        
+        # Create button box
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(self._handle_dialog_close)
+        layout.addWidget(button_box)
+        
+        # Don't show initially
+        self.persistent_dialog.finished.connect(self._handle_dialog_close)
+        
+        # Flag to track dialog state
+        self._dialog_active = False
+
+    def _handle_dialog_close(self):
+        """Handle dialog close events centrally"""
+        logging.info("Dialog close handler called")
+        self._dialog_active = False
+        self.persistent_dialog.hide()  # Hide instead of destroying
+
+    def _show_maximized_card(self, card_data):
+        """Show a maximized view of the card content using the persistent dialog"""
+        # If already active, just exit
+        if self._dialog_active:
+            logging.info("Dialog already active, ignoring request")
             return
-            
+        
+        # Set the flag to prevent multiple dialogs
         self._dialog_active = True
         
         try:
-            dialog = QDialog(self)
-            dialog.setWindowIcon(self.app_icon)  # Set icon for dialog
-            dialog.setWindowTitle(card_data.get('title', 'Analysis'))
-            dialog.setMinimumSize(600, 400)
-            layout = QVBoxLayout(dialog)
+            # Update the persistent dialog with new content
+            self.persistent_dialog.setWindowTitle(card_data.get('title', 'Analysis'))
             
-            content = QTextEdit()
-            
-            # Determine content format - if it includes HTML formatting
+            # Update content based on format
             data_content = card_data.get('content', '')
             if '<' in data_content and '>' in data_content:
-                # If it looks like it contains HTML, use HTML
-                content.setHtml(data_content)
+                self.dialog_content.setHtml(data_content)
             else:
-                # Otherwise use plain text
-                content.setPlainText(data_content)
+                self.dialog_content.setPlainText(data_content)
             
-            content.setReadOnly(True)
-            layout.addWidget(content)
-            
-            buttons = QDialogButtonBox(QDialogButtonBox.Ok)
-            # Disconnect any existing connections first
-            try:
-                buttons.accepted.disconnect()
-            except (TypeError, RuntimeError):
-                pass  # No connections to disconnect
-                
-            # Connect the button to dialog.accept() and reset flag
-            buttons.accepted.connect(lambda: self._close_dialog(dialog))
-            layout.addWidget(buttons)
-            
-            # Execute the dialog
-            dialog.exec()
-        finally:
-            # Make sure to reset the flag even if there's an error
+            # Show the dialog
+            logging.info(f"Showing dialog with title: {card_data.get('title', 'Analysis')}")
+            self.persistent_dialog.show()
+        except Exception as e:
+            logging.error(f"Error showing maximized card: {e}")
             self._dialog_active = False
-
-    def _close_dialog(self, dialog):
-        """Helper to safely close dialog and reset dialog_active flag"""
-        dialog.accept()
-        self._dialog_active = False
 
     def _show_error(self, message):
         error_dialog = QMessageBox(self)
@@ -1363,14 +1335,14 @@ class ModernStockApp(QMainWindow):
             Context about {self.current_ticker}:
             {context}
             User Question: {user_message}
-
             Please provide a helpful answer using the context provided.
             Format your response with clear paragraphs and bullet points where appropriate.
             """
+
             response = self.ai_client.analyze(
                 prompt, 
                 "financial advisor", 
-                model=OLLAMA_MODEL, 
+                model=OLLAMA_MODEL,  
                 retries=3, 
                 backoff_factor=2.0
             )
@@ -1423,7 +1395,7 @@ class ModernStockApp(QMainWindow):
                 f"P/E Ratio: {pe_ratio:.2f}",
                 f"Dividend Yield: {dividend_yield:.2f}%"
             ]
-            
+
             if hasattr(self, 'long_term_card') and self.long_term_card.content.toPlainText():
                 context_parts.append("\nRecent Analysis:")
                 context_parts.append(self.long_term_card.content.toPlainText())
@@ -1431,10 +1403,6 @@ class ModernStockApp(QMainWindow):
             if hasattr(self, 'strategy_card') and self.strategy_card.content.toPlainText():
                 context_parts.append("\nInvestment Strategy:")
                 context_parts.append(self.strategy_card.content.toPlainText())
-
-            if hasattr(self, 'day_trade_card') and self.day_trade_card.content.toPlainText():
-                context_parts.append("\nDay Trading Insights:")
-                context_parts.append(self.day_trade_card.content.toPlainText())
 
             return "\n".join(context_parts)
         except Exception as e:
@@ -1447,21 +1415,22 @@ class ModernStockApp(QMainWindow):
         self.finnhub_status = QLabel("Finnhub: Ready")
         self.news_api_status = QLabel("NewsAPI: Ready")
         self.ollama_status = QLabel("Ollama: Ready")
-        
+        self.ollama_status = QLabel("Ollama: Ready")
+
         for label in [self.finnhub_status, self.news_api_status, self.ollama_status]:
             label.setStyleSheet("""
-                QLabel {        
+                QLabel {
                     background-color: #2d2d2d; 
                     color: #00C851;  /* Green by default */
                     padding: 2px 5px;
                     margin-right: 5px;        
-                    border-radius: 3px;
+                    border-radius: 3px;       
                 }
             """)
 
         self.api_requests_label = QLabel("Total: 0")
         self.api_requests_label.setStyleSheet("color: #00bcd4; font-weight: bold; padding: 5px;")
-        
+
         self.statusBar().addPermanentWidget(self.finnhub_status)
         self.statusBar().addPermanentWidget(self.news_api_status)
         self.statusBar().addPermanentWidget(self.ollama_status)
@@ -1474,7 +1443,7 @@ class ModernStockApp(QMainWindow):
     def _update_rate_limit_status(self):
         """Update the status indicators for rate limiting"""
         stats = get_rate_limiter_stats()
-        
+
         # Update Finnhub status
         finnhub = stats["finnhub"]
         self._update_status_indicator(
@@ -1482,9 +1451,9 @@ class ModernStockApp(QMainWindow):
             "Finnhub", 
             finnhub["waiters"],
             finnhub["requests_limited"],
-            finnhub["current_tokens"]
+            finnhub["current_tokens"],
         )
-        
+
         # Update News API status
         news_api = stats["news_api"]
         self._update_status_indicator(
@@ -1494,7 +1463,7 @@ class ModernStockApp(QMainWindow):
             news_api["requests_limited"],
             news_api["current_tokens"]        
         )
-        
+
         # Update Ollama status
         ollama = stats["ollama"]
         self._update_status_indicator(
@@ -1502,9 +1471,9 @@ class ModernStockApp(QMainWindow):
             "Ollama", 
             ollama["waiters"],
             ollama["requests_limited"],
-            ollama["current_tokens"]
+            ollama["current_tokens"],
         )
-        
+
         # Update total requests
         total_requests = sum(s["requests_made"] for s in stats.values())
         self.api_requests_label.setText(f"Total: {total_requests}")
@@ -1546,8 +1515,8 @@ class ModernStockApp(QMainWindow):
         # Store widget names to safely delete
         widgets_to_cleanup = [
             'label_status', 'overview', 'metrics', 'ai_recommendation', 
-            'profit_target', 'news_card', 'long_term_card', 'day_trade_card', 
-            'strategy_card', 'chat_history', 'chart'
+            'profit_target', 'news_card', 'long_term_card', 'strategy_card', 
+            'chat_history', 'chart'
         ]
         for widget_name in widgets_to_cleanup:
             if hasattr(self, widget_name):
@@ -1585,7 +1554,7 @@ class ModernStockApp(QMainWindow):
                         description = article.get('description', 'No Description')
                         source = article.get('source', {}).get('name', 'Unknown Source')
                         date = article.get('publishedAt', '')[:10]  # Just get the date part
-                        
+
                         # Format the article
                         news_text += f"[{date}] {title}\n"
                         news_text += f"Source: {source}\n"
@@ -1593,7 +1562,7 @@ class ModernStockApp(QMainWindow):
                     except Exception as e:
                         logging.warning(f"Error processing article {i}: {e}")
                         news_text += f"Error processing article {i}: {str(e)}\n\n"
-                
+
                 # Set the compiled news text
                 if news_text:
                     self.news_feed.setPlainText(news_text)
@@ -1625,11 +1594,11 @@ class ModernStockApp(QMainWindow):
                     description = article.get('description', '')
                     source = article.get('source', {}).get('name', '')
                     date = article.get('publishedAt', '')[:10]
-                    
+
                     news_text += f"[{date}] {title}\n"
                     news_text += f"Source: {source}\n"
                     news_text += f"{description}\n\n"
-                            
+
                 self.news_feed.setPlainText(news_text)
         except Exception as e:
             logging.error(f"Error in news feed function: {e}")
@@ -1637,10 +1606,8 @@ class ModernStockApp(QMainWindow):
 
     def _get_stock_metrics(self, data_or_ticker):
         """Get financial metrics for a stock
-
         Args:
             data_or_ticker: Either a stock data dictionary or ticker symbol string
-
         Returns:
             Dictionary containing financial metrics data
         """
@@ -1660,7 +1627,7 @@ class ModernStockApp(QMainWindow):
             if not hasattr(self, 'stock_api') or self.stock_api is None:
                 logging.error("Stock API not initialized")
                 return None
-            
+
             # Make the API call to get metrics
             metrics = self.stock_api.get_financial_metrics(ticker)
 
@@ -1669,9 +1636,8 @@ class ModernStockApp(QMainWindow):
                 logging.info(f"Successfully retrieved metrics for {ticker}")
             else:
                 logging.warning(f"Retrieved empty or invalid metrics for {ticker}")
-            
-            return metrics
 
+            return metrics
         except Exception as e:
             logging.error(f"Error in _get_stock_metrics: {e}")
             return {
@@ -1682,7 +1648,7 @@ class ModernStockApp(QMainWindow):
                     "psTTM": None,
                     "dividendYieldIndicatedAnnual": None,
                     "52WeekHigh": None,
-                    "52WeekLow": None
+                    "52WeekLow": None,
                 }
             }
 
@@ -1713,7 +1679,7 @@ class ModernStockApp(QMainWindow):
         menu.addSeparator()
         about_action = QAction("About", self)
         menu.addAction(about_action)
-        
+
         # Show menu under the title
         menu.exec(self.brand_button.mapToGlobal(QPoint(0, self.brand_button.height())))
 
@@ -1721,7 +1687,7 @@ class ModernStockApp(QMainWindow):
         """Create the main settings page with category tabs"""
         settings_page = QWidget()
         layout = QVBoxLayout(settings_page)
-        
+
         # Header with back button
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
@@ -1741,47 +1707,47 @@ class ModernStockApp(QMainWindow):
             }
         """)
         back_button.clicked.connect(self._return_from_settings)
-        
+
         # Title
         title_label = QLabel("Settings")
         title_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        
+
         header_layout.addWidget(back_button)
         header_layout.addStretch(1)
         header_layout.addWidget(title_label)
         header_layout.addStretch(1)
-        
+
         layout.addWidget(header_widget)
-        
+
         # Settings categories
         categories_frame = QFrame()
         categories_frame.setStyleSheet("background-color: #1a1a1a; border-radius: 8px;")
         categories_layout = QVBoxLayout(categories_frame)
         categories_layout.setSpacing(10)
-        
+
         # Create buttons
         general_btn = QPushButton("General")
         general_btn.setStyleSheet(self._get_settings_button_style())
-        
+
         account_btn = QPushButton("Account")
         account_btn.setStyleSheet(self._get_settings_button_style())
-        
+
         privacy_btn = QPushButton("Privacy")
         privacy_btn.setStyleSheet(self._get_settings_button_style())
-        
+
         ui_btn = QPushButton("UI Settings")
         ui_btn.setStyleSheet(self._get_settings_button_style())
         ui_btn.clicked.connect(self._navigate_to_ui_settings)
-        
+
         # Add all buttons
         categories_layout.addWidget(general_btn)
         categories_layout.addWidget(account_btn)
         categories_layout.addWidget(privacy_btn)
         categories_layout.addWidget(ui_btn)
         categories_layout.addStretch()
-        
+
         layout.addWidget(categories_frame)
-        
+
         # Add page to settings stack
         self.settings_stack.addWidget(settings_page)
 
@@ -1789,12 +1755,12 @@ class ModernStockApp(QMainWindow):
         """Create UI settings page with various options"""
         ui_settings_page = QWidget()
         layout = QVBoxLayout(ui_settings_page)
-        
+
         # Header with back button
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 10)
-        
+
         back_button = QPushButton("← Back to Settings")
         back_button.setStyleSheet("""
             QPushButton {
@@ -1809,17 +1775,17 @@ class ModernStockApp(QMainWindow):
             }
         """)
         back_button.clicked.connect(self._return_to_settings)
-        
+
         title_label = QLabel("UI Settings")
         title_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
-        
+
         header_layout.addWidget(back_button)
         header_layout.addStretch(1)
         header_layout.addWidget(title_label)
         header_layout.addStretch(1)
-        
+
         layout.addWidget(header_widget)
-        
+
         # Create a scroll area for settings
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -1827,26 +1793,27 @@ class ModernStockApp(QMainWindow):
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setSpacing(20)
-        
+
         # Theme settings
         theme_group = QGroupBox("Theme")
         theme_group.setStyleSheet("QGroupBox { font-weight: bold; }")
         theme_layout = QVBoxLayout(theme_group)
-        
+
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(["Dark", "Light"])
         self.theme_combo.setCurrentText(self.current_theme)
         self.theme_combo.currentTextChanged.connect(self._update_theme)
+
         theme_layout.addWidget(QLabel("Theme Mode:"))
         theme_layout.addWidget(self.theme_combo)
-        
+
         scroll_layout.addWidget(theme_group)
-        
+
         # Font settings
         font_group = QGroupBox("Font")
         font_group.setStyleSheet("QGroupBox { font-weight: bold; }")
         font_layout = QVBoxLayout(font_group)
-        
+
         # Font size slider
         font_size_layout = QHBoxLayout()
         font_size_label = QLabel("Font Size:")
@@ -1857,14 +1824,15 @@ class ModernStockApp(QMainWindow):
         self.font_size_slider.setTickPosition(QSlider.TicksBelow)
         self.font_size_slider.setTickInterval(2)
         self.font_size_value = QLabel(f"{self.font_size_slider.value()}px")
-        
+
         self.font_size_slider.valueChanged.connect(lambda v: self._update_font_size_label(v))
+
         font_size_layout.addWidget(font_size_label)
         font_size_layout.addWidget(self.font_size_slider)
         font_size_layout.addWidget(self.font_size_value)
-        
+
         font_layout.addLayout(font_size_layout)
-        
+
         # Font family dropdown
         font_family_layout = QHBoxLayout()
         font_family_label = QLabel("Font Family:")
@@ -1873,30 +1841,31 @@ class ModernStockApp(QMainWindow):
         current_font = next((name for name, value in FONT_CHOICES.items() 
                             if value == FONT_FAMILY), "Segoe UI")
         self.font_family_combo.setCurrentText(current_font)
-        
+
         font_family_layout.addWidget(font_family_label)
         font_family_layout.addWidget(self.font_family_combo)
+
         font_layout.addLayout(font_family_layout)
-        
+
         # Bold text option
         self.bold_text_checkbox = QCheckBox("Use Bold Text (High Contrast)")
         self.bold_text_checkbox.setChecked(False)
         font_layout.addWidget(self.bold_text_checkbox)
-        
+
         scroll_layout.addWidget(font_group)
-        
+
         # Status bar settings
         status_group = QGroupBox("Status Bar")
         status_group.setStyleSheet("QGroupBox { font-weight: bold; }")
         status_layout = QVBoxLayout(status_group)
-        
+
         self.show_api_status_checkbox = QCheckBox("Show API Status Indicators")
         self.show_api_status_checkbox.setChecked(True)
         self.show_api_status_checkbox.toggled.connect(self._toggle_api_status)
-        
+
         status_layout.addWidget(self.show_api_status_checkbox)
         scroll_layout.addWidget(status_group)
-        
+
         # Apply button
         self.apply_ui_settings_btn = QPushButton("Apply Settings")
         self.apply_ui_settings_btn.setStyleSheet("""
@@ -1912,13 +1881,13 @@ class ModernStockApp(QMainWindow):
             }
         """)
         self.apply_ui_settings_btn.clicked.connect(self._apply_ui_settings)
-        
+
         scroll_layout.addStretch(1)
         scroll.setWidget(scroll_content)
-        
+
         layout.addWidget(scroll)
         layout.addWidget(self.apply_ui_settings_btn)
-        
+
         # Add page to settings stack
         self.settings_stack.addWidget(ui_settings_page)
 
@@ -1991,7 +1960,7 @@ class ModernStockApp(QMainWindow):
         if self.bold_text_checkbox.isChecked():
             app_font.setBold(True)
         QApplication.instance().setFont(app_font)
-        
+
         # Apply font family
         selected_font = self.font_family_combo.currentText()
         font_family = FONT_CHOICES.get(selected_font, FONT_FAMILY)
@@ -2000,11 +1969,11 @@ class ModernStockApp(QMainWindow):
         # Save font size to settings
         self.settings.setValue("FontSize", new_font_size)
         self.settings.setValue("BoldText", self.bold_text_checkbox.isChecked())
-        
+
         # Show confirmation
         self.statusBar().showMessage("UI settings applied", 2000)
-        
+
         # Note: Some settings like theme will require app restart for full effect
         if self.theme_combo.currentText() != self.current_theme:
-            QMessageBox.information(self, "Theme Changed", 
+            QMessageBox.information(self, "Theme Changed",
                                     "The theme change will take full effect when you restart the application.")
