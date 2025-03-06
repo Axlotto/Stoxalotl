@@ -814,78 +814,114 @@ class StockOverview(QFrame):
             self.change.setStyleSheet("color: #F44336;")  # Red for negative or zero
 
 class AnalysisCard(QFrame):
-    # Signal for maximizing the card
+    # Define a signal for maximizing the card with proper parameters
     maximize_signal = Signal(dict)
-    
+
     def __init__(self, title):
         super().__init__()
-        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
-        self.setLineWidth(2)
-        
         self.title = title
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setStyleSheet("""
+            QFrame {
+                background-color: #212121;
+                border-radius: 8px;
+                border: 1px solid #333;
+            }
+        """)
+        
+        # Set a fixed minimum height but allow expanding
+        self.setMinimumHeight(150)
+        
+        # Flag to prevent multiple clicks
+        self._maximize_in_progress = False
+        
+        self._setup_ui()
+        
+        # Make the card clickable
+        self.setCursor(Qt.PointingHandCursor)
+        
+        # Enable mouse tracking
+        self.setMouseTracking(True)
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Header with title and maximize button
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
         # Title label
-        self.title_label = QLabel(title)
-        self.title_label.setFont(QFont(FONT_FAMILY, FONT_SIZES["header"], QFont.Bold))
+        title_label = QLabel(self.title)
+        title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
         
-        # Content area
+        # Maximize button
+        max_button = QPushButton("□")  # Square symbol for maximize
+        max_button.setFixedSize(24, 24)
+        max_button.setToolTip("Maximize")
+        max_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #BB86FC;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                color: white;
+            }
+        """)
+        max_button.clicked.connect(self._maximize)
+        
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(max_button)
+        
+        # Content text edit
         self.content = QTextEdit()
         self.content.setReadOnly(True)
-        self.content.setMinimumHeight(100)
         
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.title_label)
+        # Add to main layout
+        layout.addWidget(header)
         layout.addWidget(self.content)
-                
-        # Make the card clickable
-        self.setMouseTracking(True)
-        self.setCursor(Qt.PointingHandCursor)
-
-    def mousePressEvent(self, event):
-        try:
-            if event.button() == Qt.LeftButton and not sip.isdeleted(self):
-                # Emit signal with card data
-                self.maximize_signal.emit({
-                    'title': self.title,
-                    'content': self.content.toPlainText()
-                })
-        except RuntimeError as e:
-            if "C++ object has already been deleted" in str(e):
-                pass
-            else:
-                raise
-        super().mousePressEvent(event)
     
     def show_loading(self):
-        """Show loading state in the card"""
-        self.content.setHtml(
-            """<div style='color: #757575; font-style: italic;'>
-               Loading analysis data...
-               <div style='margin-top: 10px;'>
-                 <div style='height: 10px; width: 100px; background-color: #333;
-                      border-radius: 5px; overflow: hidden; position: relative;'>
-                   <div style='position: absolute; height: 100%; width: 30px; 
-                        background-color: #00bcd4; border-radius: 5px;
-                        animation: pulse 1.5s infinite;'></div>
-                 </div>
-               </div>
-             </div>"""
-        )
-        QApplication.processEvents()
+        """Show loading state"""
+        self.content.setPlainText("Loading...")
     
-    def set_content(self, text):
-        """Set content with new structured analysis and profit-first design."""
+    def _maximize(self):
+        """Emit signal to maximize the card"""
+        # Prevent multiple rapid clicks
+        if self._maximize_in_progress:
+            return
+            
+        self._maximize_in_progress = True
+        
         try:
-            # ...parse agent response here...
-            # For priority: place Buy/Sell first, then targets and metrics
-            self.content.setHtml(text)  # Basic implementation to make the try block valid
-        except Exception as e:
-            # Fallback if parsing fails
-            self.content.setHtml(f"""
-                <p>⚠️ Analysis Unavailable</p>
-                <p>Error: {str(e)}</p>
-                <p>Last Price: $--</p>
-            """)
+            # Ensure we have the content
+            text_content = self.content.toPlainText()
+            
+            # Emit the signal with card data as dictionary
+            self.maximize_signal.emit({
+                'title': self.title,
+                'content': text_content
+            })
+        finally:
+            # Use a short timer to reset the flag after a delay
+            # This prevents accidental double-clicks while still allowing
+            # normal usage after a short delay
+            QTimer.singleShot(500, self._reset_maximize_flag)
+    
+    def _reset_maximize_flag(self):
+        """Reset the maximize in progress flag after a delay"""
+        self._maximize_in_progress = False
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press event to maximize on card click"""
+        if event.button() == Qt.LeftButton:
+            self._maximize()
+            
+        # Call the parent class method to ensure normal behavior is maintained
+        super().mousePressEvent(event)
 
 class ProfitTarget(QWidget):
     def __init__(self):
@@ -1238,7 +1274,6 @@ if __name__ == "__main__":
     window = ModernStockApp()
     window.show()
     sys.exit(app.exec())
-
 
 
 
