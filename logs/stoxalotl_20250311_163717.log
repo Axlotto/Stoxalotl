@@ -1,0 +1,42 @@
+2025-03-11 16:37:17,436 - INFO - Starting Stoxalotl - log file: C:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Testing reasons\Stoxalotl\logs\stoxalotl_20250311_163717.log
+2025-03-11 16:37:17,436 - INFO - Running system checks...
+2025-03-11 16:37:17,441 - INFO - Starting system checks
+2025-03-11 16:37:17,441 - INFO - Python version: 3.12.3
+2025-03-11 16:37:17,442 - INFO - Check passed: Python version
+2025-03-11 16:37:17,521 - INFO - Found PySide6 (version: 6.8.2.1)
+2025-03-11 16:37:17,714 - INFO - Found numpy (version: 1.26.4)
+2025-03-11 16:37:18,226 - INFO - Found pandas (version: 2.2.3)
+2025-03-11 16:37:18,535 - INFO - Found pyqtgraph (version: 0.13.7)
+2025-03-11 16:37:19,097 - INFO - Found requests (version: 2.32.3)
+2025-03-11 16:37:19,932 - INFO - Found ollama (version: unknown)
+2025-03-11 16:37:19,936 - INFO - Found tradingview_ta (version: 3.3.0)
+2025-03-11 16:37:19,936 - INFO - Check passed: Dependencies
+2025-03-11 16:37:19,943 - INFO - Loaded NEWSAPI_KEY: c91f...892a
+2025-03-11 16:37:19,943 - INFO - Loaded FINNHUB_KEY: cv0a...ll9g
+2025-03-11 16:37:19,944 - ERROR - Could not import config file to check API keys: cannot import name 'FINNHUB_API_KEY' from 'config' (C:\Users\taylo\OneDrive\Documenten\VS_Stoxalotl\Testing reasons\Stoxalotl\config.py)
+2025-03-11 16:37:19,944 - WARNING - Check failed: API keys
+2025-03-11 16:37:19,944 - INFO - Check passed: Directories
+2025-03-11 16:37:19,945 - WARNING - Some system checks failed. See log for details.
+2025-03-11 16:37:19,945 - WARNING - Some system checks failed. Proceeding anyway...
+2025-03-11 16:37:19,945 - INFO - Starting main application...
+2025-03-11 16:37:19,948 - INFO - Successfully imported sip from PyQt5
+2025-03-11 16:37:19,949 - ERROR - Could not find ModernStockApp class in loaded modules
+2025-03-11 16:37:19,950 - INFO - Application starting
+2025-03-11 16:37:19,975 - INFO - Rate limiter initialized for Finnhub: 0.5/sec, burst=3
+2025-03-11 16:37:19,975 - INFO - Rate limiter initialized for NewsAPI: 0.2/sec, burst=2
+2025-03-11 16:37:19,975 - INFO - Rate limiter initialized for Ollama: 0.33/sec, burst=1
+2025-03-11 16:37:19,976 - INFO - API Request Manager initialized with 10.0s interval
+2025-03-11 16:37:20,066 - INFO - Initializing application...
+2025-03-11 16:37:20,184 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-11 16:37:20,187 - INFO - Ollama models are available
+2025-03-11 16:37:20,226 - INFO - Making news request to: https://newsapi.org/v2/everything with query: market, from: 2025-03-09
+2025-03-11 16:37:20,228 - INFO - Making News API request: https://newsapi.org/v2/everything with params {'q': 'market', 'from': '2025-03-09', 'sortBy': 'relevancy', 'language': 'en', 'pageSize': 5}
+2025-03-11 16:37:20,450 - INFO - HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2025-03-11 16:37:20,451 - INFO - Ollama models are available
+2025-03-11 16:37:20,451 - INFO - Requesting AI analysis for role: sector analyst
+2025-03-11 16:37:20,451 - INFO - Making Ollama request with model deepseek-r1:1.5b
+2025-03-11 16:37:33,209 - INFO - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+2025-03-11 16:37:34,076 - INFO - Fixed chart X-axis orientation
+2025-03-11 16:37:34,131 - INFO - Connecting maximize_signal for strategy_card
+2025-03-11 16:37:34,132 - INFO - Connecting maximize_signal for news_card
+2025-03-11 16:37:34,132 - INFO - Connecting maximize_signal for long_term_card

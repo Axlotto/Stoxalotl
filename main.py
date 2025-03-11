@@ -758,14 +758,37 @@ class ModernStockApp(QMainWindow):
         controls.addWidget(self.chart_type)
         controls.addStretch()
 
-        # Create chart
+        # Create chart using our custom class from stock_chart.py
+        # which includes the inverted drag behavior
+        from stock_chart import StockChart
         self.chart = StockChart()
+        self._fix_chart_orientation()  # Fix chart orientation after creation
 
         # Add to layout
         layout.addLayout(controls)
         layout.addWidget(self.chart)
 
         self.tabs.addTab(chart_page, "Charts")
+
+    def _fix_chart_orientation(self):
+        """Fix chart orientation to ensure proper mouse drag direction"""
+        try:
+            # Access the chart's ViewBox(es) and fix orientation
+            if hasattr(self, 'chart') and self.chart is not None:
+                # Most charts in pyqtgraph have a plotItem with a viewBox
+                if hasattr(self.chart, 'plotItem') and self.chart.plotItem is not None:
+                    # Set invertX to False to ensure proper drag direction
+                    self.chart.plotItem.getViewBox().invertX(False)
+                    logging.info("Fixed chart X-axis orientation")
+                
+                # Some charts might have multiple plots (e.g. for Both chart type)
+                if hasattr(self.chart, 'plots') and isinstance(self.chart.plots, dict):
+                    for plot_name, plot_item in self.chart.plots.items():
+                        if hasattr(plot_item, 'getViewBox'):
+                            plot_item.getViewBox().invertX(False)
+                            logging.info(f"Fixed orientation for plot: {plot_name}")
+        except Exception as e:
+            logging.error(f"Error fixing chart orientation: {e}")
 
     def _update_chart(self):
         if (self.current_ticker):
@@ -794,6 +817,9 @@ class ModernStockApp(QMainWindow):
                         chart_type,
                     )
                     logging.info("Chart update method called successfully")
+                    
+                    # Fix chart orientation after update
+                    self._fix_chart_orientation()
                 except Exception as chart_error:
                     logging.error(f"Chart update_chart method failed: {chart_error}")
                     # Try a fallback approach
@@ -1166,18 +1192,33 @@ class ModernStockApp(QMainWindow):
             self.strategy_card.content.setHtml("<i>Loading analysis...</i>")
             QApplication.processEvents()
 
-            # Create clear sections in the prompt
+            # Get financial metrics for the ticker
+            financial_metrics = self._get_stock_metrics(self.current_ticker)
+            
+            # Create enhanced prompt with clear sections for structured output
             combined_prompt = f"""
-            Analyze the long-term investment potential of {self.current_ticker}:
-            - Current stock price: ${stock['c']}
-            - Investment amount: $10000
-            - Investment timeframe: 30 days
-            Provide a detailed analysis covering potential growth factors, risks, and investment recommendations.
-            Structure your response with clear sections:
-            LONG-TERM ANALYSIS:
-            [Your long-term analysis here, including bullet points for key factors]
-            INVESTMENT RECOMMENDATION:
-            [Clear step-by-step investment strategy with price targets]
+            Analyze {self.current_ticker} stock and provide a comprehensive investment analysis with the following sections:
+            
+            STOCK OVERVIEW:
+            Provide a brief overview of {self.current_ticker} including what they do, market position, and current price trend.
+            Current stock price: ${stock['c']:.2f}
+            
+            FINANCIAL SITUATION:
+            Analyze key financial metrics, revenue trends, profitability, and financial health.
+            
+            NEWS IMPACT:
+            Summarize how recent news and events affect the stock's outlook.
+            
+            TRAJECTORY ANALYSIS:
+            Evaluate the stock's recent performance trend and technical indicators.
+            
+            PREDICTION:
+            Forecast end of week price: $XX.XX (with confidence level)
+            Forecast end of month price: $XX.XX (with confidence level)
+            Forecast end of year price: $XX.XX (with confidence level)
+            
+            For each prediction, provide a specific price target and confidence level percentage.
+            Base predictions on financial data, market trends, and recent news.
             """
 
             # Generate analysis
@@ -1191,52 +1232,41 @@ class ModernStockApp(QMainWindow):
             content = response['message']['content']
             cleaned_content = remove_think_tags(content)
 
-            # Split the analysis based on headers
-            try:
-                # Use regex to split on section headers
-                sections = re.split(r'(?:^|\n)\s*(LONG-TERM ANALYSIS:|INVESTMENT RECOMMENDATION:)\s*(?:\n|$)', 
-                                cleaned_content, flags=re.IGNORECASE)
+            # Use the enhanced formatter for the long-term analysis card
+            AnalysisFormatter.apply_enhanced_formatting(
+                self.long_term_card.content, 
+                cleaned_content, 
+                self.current_ticker,
+                financial_metrics
+            )
+            
+            # Extract investment strategy section for the strategy card
+            strategy_match = re.search(r'(?:PREDICTION|FORECAST|OUTLOOK|TARGET):(.*?)(?=\n\n|\Z)', 
+                                     cleaned_content, re.IGNORECASE | re.DOTALL)
+            if strategy_match:
+                strategy_text = strategy_match.group(1).strip()
+            else:
+                # If no prediction section found, use the latter half of the content
+                sections = cleaned_content.split('\n\n')
+                half = len(sections) // 2
+                strategy_text = "\n\n".join(sections[half:])
+            
+            # Apply the strategy-focused formatting to the strategy card
+            AnalysisFormatter.apply_formatting_to_textedit(
+                self.strategy_card.content, 
+                strategy_text, 
+                self.current_ticker
+            )
 
-                # Process the sections if we found them
-                if len(sections) >= 4:  # The first element is empty if the split was at the start
-                    long_term = sections[2] if sections[1].strip().upper() == "LONG-TERM ANALYSIS:" else ""
-                    investment = sections[4] if len(sections) > 4 and sections[3].strip().upper() == "INVESTMENT RECOMMENDATION:" else ""
-
-                    # Apply rich formatting to each section
-                    if long_term:
-                        AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term, self.current_ticker)
-                    else:
-                        self.long_term_card.content.setPlainText("Could not extract long-term analysis.")
-
-                    if investment:
-                        AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment, self.current_ticker)
-                    else:
-                        self.strategy_card.content.setPlainText("Could not extract investment recommendation.")
-
-                    # Update recommendations based on the first section
-                    self._update_recommendations(long_term)
-                else:
-                    # Fallback to simpler division if regex doesn't work
-                    sections = cleaned_content.split("\n\n")
-                    half = len(sections) // 2  # Split into two parts instead of three
-                    long_term_text = "\n\n".join(sections[:half])
-                    investment_text = "\n\n".join(sections[half:])
-
-                    AnalysisFormatter.apply_formatting_to_textedit(self.long_term_card.content, long_term_text, self.current_ticker)
-                    AnalysisFormatter.apply_formatting_to_textedit(self.strategy_card.content, investment_text, self.current_ticker)
-
-                    self._update_recommendations(long_term_text)
-            except Exception as e:
-                logging.error(f"Error splitting analysis content: {e}")
-                # If formatting fails, fall back to plain text
-                self.long_term_card.content.setPlainText(cleaned_content)
-                self.strategy_card.content.setPlainText("Error splitting analysis.")
+            # Update recommendations based on the analysis
+            self._update_recommendations(cleaned_content)
+            
         except AIClientError as e:
             logging.error(f"Error generating combined analysis: {e}")
             self._show_error(str(e))
         except Exception as e:
             logging.error(f"Unexpected error during combined analysis generation: {e}")
-            self._show_error(f"An unexpected error occurred: {str(e)}")  # Prevent multiple dialogs from appearing
+            self._show_error(f"An unexpected error occurred: {str(e)}")
 
     def _update_recommendations(self, analysis_text):
         recs = parse_recommendations(analysis_text)

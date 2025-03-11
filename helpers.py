@@ -55,9 +55,13 @@ def analysis_color(text, theme="Dark"):
         return "#FFD700"  # Yellow/gold for neutral
 
 def remove_think_tags(text):
-    """Remove <thinking> tags from text"""
+    """Remove <thinking> and <think> tags from text"""
     import re
-    return re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    # Remove <thinking>...</thinking> tags
+    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    # Also remove <think>...</think> tags
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    return text
 
 def format_price(value):
     """
@@ -144,3 +148,37 @@ def format_currency(value, decimal_places=2):
         return f"${value:,.{decimal_places}f}"
     except (ValueError, TypeError):
         return str(value)
+
+def extract_predictions(text):
+    """Extract price predictions from analysis text"""
+    import re
+    
+    predictions = {
+        'week': {'value': None, 'confidence': None, 'range': None},
+        'month': {'value': None, 'confidence': None, 'range': None},
+        'year': {'value': None, 'confidence': None, 'range': None}
+    }
+    
+    # Week prediction
+    week_match = re.search(r'(?:week|7 day|short term).*?\$([0-9,]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
+    week_conf = re.search(r'(?:week|7 day|short term).*?confidence.*?([0-9]+(?:\.[0-9]+)?)%', text, re.IGNORECASE)
+    
+    # Month prediction
+    month_match = re.search(r'(?:month|30 day|mid term).*?\$([0-9,]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
+    month_conf = re.search(r'(?:month|30 day|mid term).*?confidence.*?([0-9]+(?:\.[0-9]+)?)%', text, re.IGNORECASE)
+    
+    # Year prediction
+    year_match = re.search(r'(?:year|365 day|long term).*?\$([0-9,]+(?:\.[0-9]+)?)', text, re.IGNORECASE)
+    year_conf = re.search(r'(?:year|365 day|long term).*?confidence.*?([0-9]+(?:\.[0-9]+)?)%', text, re.IGNORECASE)
+    
+    # Store values
+    predictions['week']['value'] = week_match.group(1) if week_match else None
+    predictions['week']['confidence'] = week_conf.group(1) if week_conf else None
+    
+    predictions['month']['value'] = month_match.group(1) if month_match else None
+    predictions['month']['confidence'] = month_conf.group(1) if month_conf else None
+    
+    predictions['year']['value'] = year_match.group(1) if year_match else None
+    predictions['year']['confidence'] = year_conf.group(1) if year_conf else None
+    
+    return predictions
